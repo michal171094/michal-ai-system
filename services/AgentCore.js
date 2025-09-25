@@ -215,6 +215,7 @@ class AgentCore {
         this.priorityEngine = new PriorityEngine(this.memory, this.graph);
         this.questionEngine = new QuestionEngine(this.memory);
         this.lastSyncStats = null;
+        this.emailClassifierRules = this.buildEmailClassifier();
     }
     ingestInitial(appData) {
         if (!appData) return;
@@ -312,6 +313,53 @@ class AgentCore {
             lastSync: this.lastSyncStats,
             prioritiesPreview: this.getPriorities(appData).slice(0,10)
         };
+    }
+    buildEmailClassifier() {
+        return [
+            { tag: 'urgent', patterns: [/urgent/i, /דחוף/, /התראה/, /action required/i] },
+            { tag: 'payment', patterns: [/invoice/i, /payment/i, /תשלום/, /חשבונית/, /סילוק/ ] },
+            { tag: 'legal', patterns: [/law/i, /legal/i, /התנגדות/, /appeal/i, /ערעור/] },
+            { tag: 'document', patterns: [/document/i, /מסמך/, /attachment/, /מצורף/, /מסמכים/] },
+            { tag: 'debt', patterns: [/debt/i, /collection/i, /גביה/, /חוב/, /inkasso/i] },
+            { tag: 'bureaucracy', patterns: [/authority/i, /office/i, /ministerium/i, /משרד/, /רשות/] },
+            { tag: 'academic', patterns: [/seminar/i, /research/i, /paper/i, /מאמר/, /סמינר/] }
+        ];
+    }
+    classifyEmail(email) {
+        const text = (email.subject + ' ' + (email.snippet||'')).toLowerCase();
+        const tags = [];
+        for (const rule of this.emailClassifierRules) {
+            if (rule.patterns.some(p=> p.test(text))) tags.push(rule.tag);
+        }
+        return [...new Set(tags)];
+    }
+    enrichEmails(appData) {
+        if (!appData.emails) return; 
+        appData.emails.forEach(em => {
+            if (!em.tags) {
+                em.tags = this.classifyEmail(em);
+            }
+        });
+    }
+    generateAutoActions(appData) {
+        this.enrichEmails(appData);
+        const actions = [];
+        (appData.emails||[]).forEach(em => {
+            if (!em.tags) return;
+            if (em.tags.includes('debt') && em.tags.includes('urgent')) {
+                actions.push({ type:'debt_followup', emailId: em.id, label:'בדיקת חוב דחופה', reason:'מייל עם תיוג debt+urgent', priority: 'high' });
+            }
+            if (em.tags.includes('payment')) {
+                actions.push({ type:'payment_plan', emailId: em.id, label:'יצירת תוכנית תשלום', reason:'זוהו מילות מפתח של תשלום', priority: 'medium' });
+            }
+            if (em.tags.includes('document')) {
+                actions.push({ type:'collect_documents', emailId: em.id, label:'איסוף מסמכים חסרים', reason:'בקשה/אזכור למסמכים', priority: 'medium' });
+            }
+            if (em.tags.includes('academic')) {
+                actions.push({ type:'academic_progress', emailId: em.id, label:'בדיקת התקדמות סמינר', reason:'נושא קשור לסמינר/מאמר', priority: 'low' });
+            }
+        });
+        return actions.slice(0, 30);
     }
 }
 

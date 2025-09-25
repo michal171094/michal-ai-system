@@ -1556,16 +1556,21 @@ async function openEmailThread(entityId) {
         const stateRes = await fetch('/api/agent/state');
         const stateData = await stateRes.json();
         if (!stateData.success) throw new Error('שגיאת מצב');
-        // We stored emails separately; fetch raw emails list by syncing 0 new (or reuse existing if we had endpoint). For now reuse /api/gmail/sync?dry=1? -> simpler: call status + show subset from local after last sync (not available). We'll fetch priorities again to avoid new endpoint.
-        // Fallback: call /api/gmail/status to ensure service up
-        await fetch('/api/gmail/status');
-        // Without a dedicated emails endpoint we rely on last ingested emails present in priorities? Not included. Minimal improvement: show message.
-        // Enhancement: we add a simple call to /api/agent/state then show last events referencing this entity.
-        const events = (stateData.data?.memory?.events||[]).filter(e => e.type === 'email_linked' && e.payload?.entity === entityId).slice(-20).reverse();
+        // Better: fetch emails endpoint and filter heuristically by entity tokens (basic: show all recent linked events + matching case_number tokens)
+        const events = (stateData.data?.memory?.events||[]).filter(e => e.type === 'email_linked' && e.payload?.entity === entityId).slice(-50).reverse();
+        const emailsRes = await fetch('/api/emails');
+        const emailsData = await emailsRes.json();
+        let emails = emailsData.success ? emailsData.data : [];
+        // Build index by id
+        const emailMap = new Map(emails.map(e=>[e.id,e]));
         if (!events.length) { body.innerHTML = 'אין תכתובת מקושרת'; return; }
         body.innerHTML = events.map(ev => {
+            const em = emailMap.get(ev.payload.emailId) || {}; 
             const dt = new Date(ev.timestamp).toLocaleString('he-IL');
-            return `<div class="email-msg"><div class="em-subject">מייל מקושר (ציון התאמה ${ev.payload.score})</div><div class="em-meta">${dt}</div><div class="em-snippet">Email ID: ${ev.payload.emailId}</div></div>`;
+            const subj = em.subject || '(ללא נושא)';
+            const tags = (em.tags||[]).map(t=> `<span class='tag-chip'>${t}</span>`).join('');
+            const snippet = (em.snippet||'').slice(0,240);
+            return `<div class="email-msg"><div class="em-subject">${subj}</div><div class="em-meta">${dt} • התאמה ${ev.payload.score} ${tags}</div><div class="em-snippet">${snippet}</div></div>`;
         }).join('');
         const closeBtn = document.getElementById('closeEmailThreadBtn');
         if (closeBtn && !closeBtn._bound) { closeBtn.addEventListener('click', ()=> panel.style.display='none'); closeBtn._bound = true; }
@@ -1573,6 +1578,17 @@ async function openEmailThread(entityId) {
         const body = document.getElementById('emailThreadBody');
         if (body) body.innerHTML = 'שגיאה בטעינת תכתובת';
     }
+}
+
+// Auto-actions loading (optional future UI element placeholder)
+async function loadAutoActionsPreview() {
+    try {
+        const res = await fetch('/api/agent/auto-actions');
+        const data = await res.json();
+        if (!data.success) return;
+        // For now just log; could inject into a future panel
+        console.log('🔧 הצעות אוטומטיות:', data.data);
+    } catch (e) { /* ignore */ }
 }
 
 console.log('✅ מיכל AI - מערכת עוזרת אישית מוכנה לעבודה! 🚀');

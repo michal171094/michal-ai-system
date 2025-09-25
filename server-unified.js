@@ -69,6 +69,8 @@ app.get('/api/agent/questions', (req,res)=> { try { const q = AgentCore.generate
 app.post('/api/agent/questions/:id/answer', (req,res)=> { const ok = AgentCore.memory.answerQuestion(req.params.id, req.body.answer); AgentCore.memory.persist(); res.json({success:ok}); });
 app.post('/api/agent/sync/simulate', (req,res)=> { res.json({success:true, data: AgentCore.runSyncSimulation(req.body?.sources)}); });
 app.get('/api/agent/state', (req,res)=> { res.json({success:true, data: AgentCore.stateSnapshot(appData)}); });
+// Auto actions suggestions
+app.get('/api/agent/auto-actions', (req,res)=> { try { const acts = AgentCore.generateAutoActions(appData); res.json({success:true, data:acts}); } catch(e){ res.status(500).json({success:false,error:e.message}); } });
 
 // ---------- Gmail Integration / Ingest ----------
 app.get('/api/gmail/status', (req,res)=> { if (!gmailService) return res.json({configured:false, authenticated:false}); res.json({configured:true, authenticated:gmailService.hasValidTokens()}); });
@@ -95,6 +97,43 @@ app.post('/api/gmail/sync', async (req,res)=> {
     res.status(500).json({ success:false, error:e.message });
   }
 });
+
+// List emails with optional entity linkage filter (basic: filter by case_number or subject token)
+app.get('/api/emails', (req,res)=> {
+  try {
+    AgentCore.enrichEmails(appData);
+    const { q } = req.query;
+    let emails = appData.emails || [];
+    if (q) {
+      const needle = q.toLowerCase();
+      emails = emails.filter(e => (e.subject||'').toLowerCase().includes(needle) || (e.snippet||'').toLowerCase().includes(needle));
+    }
+    res.json({ success:true, data: emails.slice(-200) });
+  } catch (e) {
+    res.status(500).json({ success:false, error:e.message });
+  }
+});
+
+// Background polling (every 15 min) if authenticated
+if (process.env.GMAIL_BACKGROUND_SYNC === '1') {
+  setInterval(async () => {
+    try {
+      if (!gmailService || !gmailService.hasValidTokens()) return;
+      const emails = await gmailService.listRecentEmails(15);
+      const existing = new Set((appData.emails||[]).map(e=>e.id));
+      const newEmails = [];
+      emails.forEach(em => { if(!existing.has(em.id)) { const simplified = { id: em.id, subject: em.subject, from: em.from, date: em.date, snippet: em.snippet }; (appData.emails|| (appData.emails= [])).push(simplified); newEmails.push(simplified); } });
+      if (newEmails.length) {
+        saveAppData();
+        AgentCore.memory.addEvent('emails_ingested_background', { count:newEmails.length });
+        AgentCore.priorityEngine.ingestEmails(appData, newEmails);
+        console.log('📥 Background Gmail sync ingested', newEmails.length);
+      }
+    } catch (e) {
+      console.warn('Background Gmail sync failed:', e.message);
+    }
+  }, 15 * 60 * 1000);
+}
 
 // ---------- Smart overview (reuse AgentCore priorities preview) ----------
 app.get('/api/smart-overview', (req,res)=> {

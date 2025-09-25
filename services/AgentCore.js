@@ -138,8 +138,19 @@ class PriorityEngine {
             else if (amt > 0) { pts = 10; tier = '>0'; }
             add('סכום כספי', pts, { amount: amt, tier });
         }
-        // Status urgency
-        const statusWeights = { 'התראה': 40, 'פתוח': 25, 'בהתנגדות': 30, 'בהמתנה': 10 };
+        // Status urgency (expanded Hebrew statuses)
+        const statusWeights = {
+            'התראה': 40,
+            'פתוח': 25,
+            'בהתנגדות': 30,
+            'בהמתנה': 10,
+            'בעבודה': 20,
+            'בבדיקה': 18,
+            'טרם פתור': 28,
+            'בהליך': 22,
+            'מאושר': 5,
+            'המתנה לאישור': 15
+        };
         add('סטטוס', statusWeights[item.status] || 5, { status: item.status });
         // VIP client influence
         if (item.client && this.graph.getNode('client_'+item.client)?.props?.tier === 'VIP') {

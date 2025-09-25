@@ -46,16 +46,8 @@ function saveAppData() {
 }
 let appData = loadAppData();
 
-// Seed minimal demo if empty
-if (!appData.tasks.length && !appData.debts.length) {
-  appData.tasks = [
-    {id:1, project:'סמינר פסיכולוגיה', client:'כרמית', deadline:new Date(Date.now()+86400000*2).toISOString().slice(0,10), status:'בעבודה', value:3500, currency:'₪', action:'טיוטה ראשונית'},
-  ];
-  appData.debts = [
-    {id:1, creditor:'PAIR Finance', company:'Immobilien Scout', amount:69.52, currency:'€', case_number:'120203581836', status:'פתוח', action:'התנגדות', deadline:new Date(Date.now()+86400000*3).toISOString().slice(0,10)}
-  ];
-  saveAppData();
-}
+// Start with empty data - no demo seeding
+console.log(`📊 Loaded data: ${appData.tasks?.length || 0} tasks, ${appData.debts?.length || 0} debts, ${appData.bureaucracy?.length || 0} bureaucracy items, ${appData.emails?.length || 0} emails`);
 
 // Gmail init (optional) - ensure non-blocking startup
 let gmailService = null;

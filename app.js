@@ -172,10 +172,22 @@ function loadInitialData() {
     loadConnectorsDashboard({ silent: true });
     handleGmailOAuthCallback();
     
-    // Show welcome message
-    setTimeout(() => {
-        addMessageToChat('שלום מיכל! אני כאן לעזור לך לנהל את כל המשימות שלך. מה תרצי לעשות היום?', 'ai');
-    }, 1000);
+    // Show welcome message based on data state
+    setTimeout(async () => {
+        try {
+            const response = await fetch('/api/smart-overview');
+            const payload = await response.json();
+            const hasData = payload?.data?.priorities?.length > 0 || payload?.data?.stats?.total > 0;
+            
+            if (hasData) {
+                addMessageToChat('שלום מיכל! יש לך משימות פעילות במערכת. אני כאן לעזור לך לנהל אותן. מה תרצי לעשות היום?', 'ai');
+            } else {
+                addMessageToChat('שלום מיכל! המערכת מוכנה לעבודה. כדי להתחיל, תוכלי להתחבר ל-Gmail בטאב "חיבורים" או להוסיף משימות ידנית. איך אוכל לעזור?', 'ai');
+            }
+        } catch (error) {
+            addMessageToChat('שלום מיכל! אני כאן לעזור לך לנהל את המשימות שלך. בואי נתחיל!', 'ai');
+        }
+    }, 1500);
 }
 
 // Load smart overview data
@@ -197,14 +209,29 @@ async function loadSmartOverview() {
         updateStats(overview.stats || {});
         updateDomainTables(overview.domains || {});
         applySmartOverviewTimestamp(overview.lastUpdated);
+        updateSystemStatus('active', `מערכת פעילה • ${overview.stats?.total || 0} משימות`);
         console.log('✅ נתונים נטענו מהשרת');
         return;
     } catch (error) {
-        console.warn('⚠️ לא ניתן לטעון מהשרת, מציג נתוני דמו:', error);
+        console.warn('⚠️ לא ניתן לטעון מהשרת:', error);
+        updateSystemStatus('error', 'שגיאה בחיבור לשרת');
+        showEmptyState();
     }
+}
 
-    console.log('📊 מציג נתוני דמו...');
-    showDemoData();
+function updateSystemStatus(status, text) {
+    const indicator = document.getElementById('systemStatusIndicator');
+    if (!indicator) return;
+    
+    const dot = indicator.querySelector('.status-dot');
+    const textEl = indicator.querySelector('.status-text');
+    
+    if (dot) {
+        dot.className = `status-dot ${status}`;
+    }
+    if (textEl) {
+        textEl.textContent = text;
+    }
 }
 
 function applySmartOverviewTimestamp(lastUpdated) {
@@ -479,64 +506,34 @@ function emptyTableRow(colspan, message) {
     return `<tr><td colspan="${colspan}" style="text-align:center;padding:16px;color:var(--color-text-secondary);">${message}</td></tr>`;
 }
 
-// Show demo data when server is not available
-function showDemoData() {
-    const demoStats = {
-        critical: 3,
-        urgent: 4,
-        pending: 6,
-        emailTasks: 2
+// Show empty state when no data is available
+function showEmptyState() {
+    const emptyStats = {
+        critical: 0,
+        urgent: 0,
+        pending: 0,
+        emailTasks: 0
     };
 
-    const demoAcademic = [
-        { id: 1, project: 'סמינר פסיכולוגיה', client: 'כרמית', deadline: new Date(Date.now() + 86400000).toISOString().slice(0, 10), status: 'בעבודה', action: 'טיוטה ראשונית' }
-    ];
-    const demoDebts = [
-        { id: 1, creditor: 'PAIR Finance', company: 'Immobilien Scout', amount: 69.52, currency: '€', case_number: '120203581836', status: 'פתוח', deadline: new Date(Date.now() + 86400000 * 3).toISOString().slice(0, 10), action: 'הגשת התנגדות' }
-    ];
-    const demoBureau = [
-        { id: 1, task: 'TK ביטוח בריאות', authority: 'Techniker Krankenkasse', deadline: new Date(Date.now() + 86400000 * 5).toISOString().slice(0, 10), status: 'מסמכים חסרים', action: 'העלאת טפסים' }
-    ];
+    updateSmartOverview([]);
+    updateStats(emptyStats);
+    updateDomainTables({ academic: [], debts: [], bureaucracy: [], emails: [] });
+    updateSystemStatus('empty', 'מערכת ריקה - מוכנה לנתונים');
 
-    const demoPriorities = [
-        {
-            id: 'task_demo_1',
-            domain: 'academic',
-            title: 'כרמית - סמינר פסיכולוגיה',
-            status: 'בעבודה',
-            deadline: demoAcademic[0].deadline,
-            priorityScore: 95,
-            action: 'שליחת טיוטה',
-            client: 'כרמית',
-            lastEmailAt: new Date(Date.now() - 3600000).toISOString(),
-            emailCount: 3
-        },
-        {
-            id: 'debt_demo_1',
-            domain: 'debt',
-            title: 'PAIR Finance - Immobilien Scout',
-            status: 'פתוח',
-            deadline: demoDebts[0].deadline,
-            priorityScore: 90,
-            action: 'שליחת התנגדות',
-            amount: demoDebts[0].amount,
-            currency: demoDebts[0].currency,
-            case_number: demoDebts[0].case_number
-        },
-        {
-            id: 'bureau_demo_1',
-            domain: 'bureaucracy',
-            title: 'TK ביטוח בריאות - שליחת מסמכים',
-            status: 'מסמכים חסרים',
-            deadline: demoBureau[0].deadline,
-            priorityScore: 82,
-            action: 'הגשת מסמכים'
-        }
-    ];
-
-    updateSmartOverview(demoPriorities);
-    updateStats(demoStats);
-    updateDomainTables({ academic: demoAcademic, debts: demoDebts, bureaucracy: demoBureau, emails: [] });
+    // Add helpful message to get started
+    const tableBody = document.getElementById('smartTableBody');
+    if (tableBody) {
+        tableBody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:30px;">
+            <div style="color:var(--color-text-secondary);">
+                <h3 style="margin-bottom:10px;">👋 ברוכה הבאה!</h3>
+                <p style="margin-bottom:15px;">עדיין אין נתונים במערכת.</p>
+                <div style="font-size:14px;">
+                    <p><strong>לבדיקת חיבור Gmail:</strong> לכי לטאב "🔌 חיבורים" ולחצי "התחברות"</p>
+                    <p><strong>להוספת משימות:</strong> השתמשי בטפסי ההוספה בטאבים השונים</p>
+                </div>
+            </div>
+        </td></tr>`;
+    }
 }
 
 // Connectors dashboard helpers

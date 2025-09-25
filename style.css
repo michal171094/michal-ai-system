@@ -1708,6 +1708,33 @@ body {
 .smart-last-updated span:first-child {
   opacity: 0.7;
 }
+
+.system-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin-top: var(--space-4);
+  font-size: var(--font-size-sm);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-text-secondary);
+}
+
+.status-dot.active {
+  background: var(--color-success);
+}
+
+.status-dot.empty {
+  background: var(--color-warning);
+}
+
+.status-dot.error {
+  background: var(--color-error);
+}
 }
 
 .smart-stat {

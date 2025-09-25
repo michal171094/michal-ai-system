@@ -1204,115 +1204,9 @@ function implementRecommendation(module, type, action) {
         event.target.disabled = true;
     }
 }
-    const body = document.getElementById('syncModalBody');
-    if (!body) return;
-    
-    if (!updates || updates.length === 0) {
-        body.innerHTML = `
-            <div class="sync-no-updates">
-                <div class="icon">✅</div>
-                <h4>אין עדכונים חדשים</h4>
-                <p>כל העדכונים עודכנו</p>
-            </div>
-        `;
-        return;
-    }
-    
-    const updatesHtml = updates.map(update => `
-        <div class="sync-update-item" data-id="${update.id}">
-            <div class="sync-update-header">
-                <h4 class="sync-update-title">${update.title}</h4>
-                <span class="sync-update-type ${update.type}">${getTypeLabel(update.type)}</span>
-            </div>
-            <div class="sync-update-details">
-                ${formatUpdateDetails(update.details)}
-            </div>
-            <div class="sync-update-actions">
-                ${getActionButtons(update.action, update.id)}
-            </div>
-            <div class="sync-timestamp">
-                ${formatTimestamp(update.timestamp)}
-            </div>
-        </div>
-    `).join('');
-    
-    body.innerHTML = `<div class="sync-updates-list">${updatesHtml}</div>`;
-}
+// --- Legacy sync code removed & cleaned (duplicate helpers, unused blocks) ---
+// Retain only the functions still needed by current advanced UI: closeSyncModal, loadSyncBadges.
 
-// Helper functions for sync updates
-function getTypeLabel(type) {
-    const labels = {
-        'new_task': 'משימה חדשה',
-        'status_update': 'עדכון סטטוס',
-        'deadline_change': 'שינוי דדליין',
-        'payment_plan_offer': 'הצעת תשלומים',
-        'important_email': 'מייל חשוב',
-        'new_inquiry': 'פנייה חדשה'
-    };
-    return labels[type] || type;
-}
-
-function formatUpdateDetails(details) {
-    if (!details) return '';
-    
-    return Object.entries(details)
-        .filter(([key]) => key !== 'content_summary')
-        .map(([key, value]) => `<p><strong>${key}:</strong> ${value}</p>`)
-        .join('');
-}
-
-function getActionButtons(action, updateId) {
-    return `
-        <button class="sync-action-btn approve" onclick="handleSyncAction('${updateId}', 'approve')">אשר</button>
-        <button class="sync-action-btn dismiss" onclick="handleSyncAction('${updateId}', 'dismiss')">התעלם</button>
-    `;
-}
-
-function formatTimestamp(timestamp) {
-    const date = new Date(timestamp);
-    return date.toLocaleString('he-IL');
-}
-
-// Handle sync actions
-async function handleSyncAction(updateId, action) {
-    console.log(`⚡ מבצע פעולה: ${action} על עדכון ${updateId}`);
-    
-    try {
-        const response = await fetch('/api/sync/action', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ updateId, action })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            // Remove the update from display
-            const updateItem = document.querySelector(`[data-id="${updateId}"]`);
-            if (updateItem) {
-                updateItem.remove();
-                
-                // Check if no more updates
-                const remaining = document.querySelectorAll('.sync-update-item');
-                if (remaining.length === 0) {
-                    displaySyncUpdates([], '');
-                }
-            }
-            
-            showNotification('פעולה בוצעה בהצלחה!', 'success');
-            loadSyncBadges();
-            
-        } else {
-            showNotification('שגיאה בביצוע הפעולה', 'error');
-        }
-        
-    } catch (error) {
-        console.error('שגיאה בביצוע פעולה:', error);
-        showNotification('שגיאה בחיבור לשרת', 'error');
-    }
-}
-
-// Close sync modal
 function closeSyncModal() {
     const modal = document.getElementById('syncModal');
     if (modal) {
@@ -1321,45 +1215,22 @@ function closeSyncModal() {
     }
 }
 
-// Show sync error
-function showSyncError(message) {
-    const body = document.getElementById('syncModalBody');
-    if (body) {
-        body.innerHTML = `
-            <div class="sync-no-updates">
-                <div class="icon">❌</div>
-                <h4>שגיאה</h4>
-                <p>${message}</p>
-            </div>
-        `;
-    }
-}
-
-// Load sync badges
 async function loadSyncBadges() {
     console.log('🏷️ טוען תגי סנכרון...');
-    
     const modules = ['academic', 'bureaucracy', 'debts', 'emails'];
-    
     for (const module of modules) {
         try {
             const response = await fetch(`/api/sync/${module}`);
             const data = await response.json();
-            
             if (data.success) {
                 const badge = document.getElementById(`${module}Badge`);
                 const count = data.count || 0;
-                
                 if (badge) {
                     badge.textContent = count;
                     const button = badge.closest('.sync-btn');
-                    
                     if (button) {
-                        if (count > 0) {
-                            button.classList.add('has-updates');
-                        } else {
-                            button.classList.remove('has-updates');
-                        }
+                        if (count > 0) button.classList.add('has-updates');
+                        else button.classList.remove('has-updates');
                     }
                 }
             }
@@ -1369,25 +1240,7 @@ async function loadSyncBadges() {
     }
 }
 
-// Utility functions
-function showNotification(message, type = 'info') {
-    console.log(`🔔 הודעה ${type}: ${message}`);
-    
-    const notification = document.createElement('div');
-    notification.className = `notification ${type}`;
-    notification.textContent = message;
-    
-    document.body.appendChild(notification);
-    
-    setTimeout(() => notification.classList.add('show'), 100);
-    setTimeout(() => {
-        notification.classList.remove('show');
-        setTimeout(() => document.body.removeChild(notification), 300);
-    }, 3000);
-}
-
-// Make functions available globally
-window.handleSyncAction = handleSyncAction;
+// Expose only required legacy global handlers
 window.handleTaskAction = handleTaskAction;
 
 console.log('✅ מיכל AI - מערכת עוזרת אישית מוכנה לעבודה! 🚀');

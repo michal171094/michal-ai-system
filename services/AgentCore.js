@@ -232,6 +232,7 @@ class AgentCore {
         (appData.tasks||[]).forEach(t=> list.push({ id: 'task_'+t.id, domain: 'academic', title: t.project, deadline: t.deadline, status: t.status, client: t.client, action: t.action, amount: t.value, currency: t.currency }));
         (appData.debts||[]).forEach(d=> list.push({ id: 'debt_'+d.id, domain: 'debt', title: d.company + ' - ' + d.creditor, deadline: d.deadline, status: d.status, action: d.action, amount: d.amount, currency: d.currency, case_number: d.case_number }));
         (appData.bureaucracy||[]).forEach(b=> list.push({ id: 'bureau_'+b.id, domain: 'bureaucracy', title: b.task + ' - ' + b.authority, deadline: b.deadline, status: b.status, action: b.action }));
+        (appData.emails||[]).forEach(e=> list.push({ id: 'email_'+e.id, domain: 'email', title: e.subject || '(ללא נושא)', deadline: null, status: 'חדש', action: 'עיבוד', from: e.from }));
         return list;
     }
     getPriorities(appData) {

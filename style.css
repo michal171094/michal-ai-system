@@ -160,6 +160,8 @@
 .status-badge.low, .status-badge.נמוך { background:rgba(var(--color-slate-500-rgb),0.15); color:var(--color-slate-500); }
 .action-chip { background:rgba(var(--color-brown-600-rgb),0.12); color:var(--color-brown-600); padding:6px 14px; border-radius:16px; font-size:12px; font-weight:500; display:inline-block; }
 .priorities-toolbar { display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-top:10px; }
+.priorities-toolbar button#gmailSyncBtn { background:linear-gradient(90deg,#ea4335,#fbbc05,#34a853,#4285f4); color:#fff; font-weight:600; }
+.priorities-toolbar button#gmailSyncBtn:hover { filter:brightness(1.1); }
 .priorities-toolbar .balance-input-group { display:flex; align-items:center; gap:6px; background:var(--color-surface); padding:6px 10px; border:1px solid var(--color-card-border); border-radius:8px; }
 .priorities-toolbar input { border:1px solid var(--color-border); border-radius:6px; padding:6px 8px; background:var(--color-background); }
 .questions-panel { margin-top:15px; border:1px solid var(--color-card-border); background:var(--color-surface); border-radius:10px; padding:12px 16px; }

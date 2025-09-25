@@ -1463,10 +1463,12 @@ initializeEventListeners = function() {
     const updateBalanceBtn = document.getElementById('updateBalanceBtn');
     const runSyncSimBtn = document.getElementById('runSyncSimBtn');
     const loadQuestionsBtn = document.getElementById('loadQuestionsBtn');
+    const gmailSyncBtn = document.getElementById('gmailSyncBtn');
     if (refreshPrioritiesBtn) refreshPrioritiesBtn.addEventListener('click', loadPrioritiesData);
     if (updateBalanceBtn) updateBalanceBtn.addEventListener('click', updateBalanceFromInput);
     if (runSyncSimBtn) runSyncSimBtn.addEventListener('click', runSyncSimulation);
     if (loadQuestionsBtn) loadQuestionsBtn.addEventListener('click', toggleQuestionsPanel);
+    if (gmailSyncBtn) gmailSyncBtn.addEventListener('click', syncGmailAndRefresh);
 };
 
 // Hook into tab switching for priorities
@@ -1498,5 +1500,37 @@ function showScoreBreakdown(el) {
     } catch (e) {}
 }
 window.showScoreBreakdown = showScoreBreakdown;
+
+async function syncGmailAndRefresh() {
+    try {
+        const statusRes = await fetch('/api/gmail/status');
+        const st = await statusRes.json();
+        if (!st.configured) { showNotification('שירות Gmail כבוי בשרת'); return; }
+        if (!st.authenticated) {
+            const urlRes = await fetch('/api/gmail/auth-url');
+            const urlData = await urlRes.json();
+            if (urlData.url) { window.open(urlData.url, '_blank'); showNotification('פתחתי חלון התחברות לגוגל'); }
+            else showNotification('אין URL התחברות','error');
+            return;
+        }
+        const res = await fetch('/api/gmail/sync', { method:'POST' });
+        const data = await res.json();
+        if (data.auth_required) {
+            const urlRes = await fetch('/api/gmail/auth-url');
+            const urlData = await urlRes.json();
+            if (urlData.url) window.open(urlData.url,'_blank');
+            showNotification('נדרש אימות Gmail');
+            return;
+        }
+        if (data.success) {
+            showNotification(`נסרקו ${data.ingested} מיילים חדשים`);
+            loadPrioritiesData();
+        } else {
+            showNotification('שגיאה בסנכרון Gmail','error');
+        }
+    } catch (e) {
+        showNotification('שגיאת רשת Gmail','error');
+    }
+}
 
 console.log('✅ מיכל AI - מערכת עוזרת אישית מוכנה לעבודה! 🚀');

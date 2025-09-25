@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>עוזרת AI אישית - מיכל</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-content">
+                <h1>עוזרת AI אישית</h1>
+                <div class="header-info">
+                    <span class="current-date">רביעי, 24 בספטמבר 2025</span>
+                    <span class="user-name">שלום מיכל 👋</span>
+                </div>
+            </div>
+        </header>
+
+        <main class="app-main">
+            <!-- Stats Cards -->
+            <div class="stats-grid">
+                <div class="stat-card urgent">
+                    <div class="stat-number">4</div>
+                    <div class="stat-label">משימות דחופות</div>
+                </div>
+                <div class="stat-card today">
+                    <div class="stat-number">3</div>
+                    <div class="stat-label">פעולות היום</div>
+                </div>
+                <div class="stat-card revenue">
+                    <div class="stat-number">₪8,150</div>
+                    <div class="stat-label">הכנסות צפויות</div>
+                </div>
+                <div class="stat-card debts">
+                    <div class="stat-number">5</div>
+                    <div class="stat-label">חובות פעילים</div>
+                </div>
+            </div>
+
+            <div class="main-content">
+                <!-- Left Side - Dashboard -->
+                <div class="dashboard-section">
+                    <!-- Navigation Tabs -->
+        <div class="nav-tabs">
+            <button class="nav-tab active" data-tab="smart-overview">🧠 סקירה חכמה</button>
+            <button class="nav-tab" data-tab="academic">📚 אקדמיה</button>
+            <button class="nav-tab" data-tab="debts">💰 חובות</button>
+            <button class="nav-tab" data-tab="bureaucracy">🏛️ בירוקרטיה</button>
+            <button class="nav-tab" data-tab="overview">📊 סיכום</button>
+        </div>                    <!-- Tab Contents -->
+                    <div class="tab-content">
+                        <!-- Smart Overview Tab - טאב הסקירה החכמה -->
+                        <div id="smart-overview" class="tab-panel active">
+                            <div class="page-header">
+                                <h2>🧠 סקירה חכמה - כל המשימות לפי עדיפות AI</h2>
+                                <div class="header-actions">
+                                    <button class="action-btn primary" id="syncEmailBtn">
+                                        📧 סנכרון מיילים
+                                    </button>
+                                    <button class="action-btn secondary" id="refreshSmartBtn">
+                                        🔄 רענון חכם
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Smart Stats -->
+                            <div class="smart-stats">
+                                <div class="smart-stat critical">
+                                    <div class="stat-icon">🚨</div>
+                                    <div class="stat-info">
+                                        <div class="stat-number" id="criticalCount">0</div>
+                                        <div class="stat-label">קריטי היום</div>
+                                    </div>
+                                </div>
+                                <div class="smart-stat urgent">
+                                    <div class="stat-icon">⚡</div>
+                                    <div class="stat-info">
+                                        <div class="stat-number" id="urgentCount">0</div>
+                                        <div class="stat-label">דחוף השבוע</div>
+                                    </div>
+                                </div>
+                                <div class="smart-stat pending">
+                                    <div class="stat-icon">📋</div>
+                                    <div class="stat-info">
+                                        <div class="stat-number" id="pendingCount">0</div>
+                                        <div class="stat-label">ממתינות</div>
+                                    </div>
+                                </div>
+                                <div class="smart-stat new-from-email">
+                                    <div class="stat-icon">📨</div>
+                                    <div class="stat-info">
+                                        <div class="stat-number" id="emailTasksCount">0</div>
+                                        <div class="stat-label">חדש ממייל</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Gmail Integration Controls -->
+                            <div class="gmail-controls">
+                                <button class="gmail-sync-btn" id="syncEmailBtn">🔄 סנכרן Gmail</button>
+                                <button class="document-process-btn" id="processDocsBtn">📄 עבד מסמכים</button>
+                                <button class="smart-recommendations-btn" id="smartRecBtn">🎯 המלצות חכמות</button>
+                                <input type="file" id="documentUpload" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none">
+                                <button class="upload-document-btn" id="uploadDocBtn">📎 העלה מסמך</button>
+                            </div>
+
+                            <!-- Smart Recommendations Panel -->
+                            <div id="recommendations-panel" class="recommendations-panel" style="display: none;">
+                                <h3>🎯 המלצות חכמות</h3>
+                                <div id="recommendationsContainer"></div>
+                            </div>
+
+                            <!-- Smart Table -->
+                            <div class="table-container">
+                                <table class="tasks-table" id="smartTable">
+                                    <thead>
+                                        <tr>
+                                            <th>🎯 עדיפות AI</th>
+                                            <th>📝 משימה</th>
+                                            <th>🏷️ תחום</th>
+                                            <th>👤 גורם</th>
+                                            <th>📅 דדליין</th>
+                                            <th>⏰ זמן נותר</th>
+                                            <th>🔥 דחיפות</th>
+                                            <th>⚡ פעולה</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="smartTableBody">
+                                        <!-- יתמלא באופן דינמי -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Academic Tasks Tab -->
+                        <div id="academic" class="tab-panel">
+                            <h2>משימות אקדמיות</h2>
+                            <div class="table-container">
+                                <table class="tasks-table" id="academicTable">
+                                    <thead>
+                                        <tr>
+                                            <th>פרויקט</th>
+                                            <th>לקוח</th>
+                                            <th>מועד</th>
+                                            <th>סטטוס</th>
+                                            <th>דחיפות</th>
+                                            <th>פעולה נדרשת</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Academic tasks will be populated by JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Bureaucracy Tab -->
+                        <div id="bureaucracy" class="tab-panel">
+                            <h2>בירוקרטיה גרמנית וישראלית</h2>
+                            <div class="table-container">
+                                <table class="tasks-table" id="bureaucracyTable">
+                                    <thead>
+                                        <tr>
+                                            <th>משימה</th>
+                                            <th>רשות</th>
+                                            <th>מועד</th>
+                                            <th>סטטוס</th>
+                                            <th>דחיפות</th>
+                                            <th>פעולה נדרשת</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Bureaucracy tasks will be populated by JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Debts Tab -->
+                        <div id="debts" class="tab-panel">
+                            <h2>ניהול חובות וגביה</h2>
+                            <div class="table-container">
+                                <table class="debts-table" id="debtsTable">
+                                    <thead>
+                                        <tr>
+                                            <th>נושה</th>
+                                            <th>חברה</th>
+                                            <th>סכום</th>
+                                            <th>מספר תיק</th>
+                                            <th>סטטוס</th>
+                                            <th>מועד</th>
+                                            <th>פעולה נדרשת</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- Debts will be populated by JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Overview Tab -->
+                        <div id="overview" class="tab-panel">
+                            <h2>סקירה כללית</h2>
+                            <div class="overview-grid">
+                                <div class="overview-section">
+                                    <h3>דחוף היום</h3>
+                                    <div id="urgentToday" class="urgent-list">
+                                        <!-- Will be populated by JS -->
+                                    </div>
+                                </div>
+                                <div class="overview-section">
+                                    <h3>השבוע הקרוב</h3>
+                                    <div id="thisWeek" class="week-list">
+                                        <!-- Will be populated by JS -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Side - Chat Interface -->
+                <div class="chat-section">
+                    <div class="chat-header">
+                        <h3>עוזרת AI</h3>
+                        <div class="chat-status">
+                            <div class="status-indicator online"></div>
+                            <span>מחוברת</span>
+                        </div>
+                    </div>
+
+                    <!-- Quick Questions -->
+                    <div class="quick-questions">
+                        <h4>שאלות מהירות:</h4>
+                        <div class="quick-question-buttons">
+                            <button class="quick-btn" data-question="מה דחוף היום?">מה דחוף היום?</button>
+                            <button class="quick-btn" data-question="איך אני עונה ל-PAIR Finance?">איך עונים ל-PAIR Finance?</button>
+                            <button class="quick-btn" data-question="מה המצב עם הבירוקרטיה?">מצב הבירוקרטיה</button>
+                            <button class="quick-btn" data-question="הכן טיוטת מייל">הכנת טיוטת מייל</button>
+                        </div>
+                    </div>
+
+                    <!-- Chat Messages -->
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="message ai-message">
+                            <div class="message-content">
+                                שלום מיכל! יש לך כמה משימות דחופות היום - הסמינריון של כרמית וההתנגדות ל-PAIR Finance. איך אני יכולה לעזור?
+                            </div>
+                            <div class="message-time">18:00</div>
+                        </div>
+                    </div>
+
+                    <!-- Chat Input -->
+                    <div class="chat-input-area">
+                        <div class="file-upload-mini">
+                            <input type="file" id="chatFileInput" class="hidden" multiple>
+                            <button class="file-btn" id="fileUploadBtn">📎</button>
+                        </div>
+                        <div class="voice-input">
+                            <button class="voice-btn" id="voiceBtn">🎤</button>
+                        </div>
+                        <div class="text-input">
+                            <textarea id="chatInput" placeholder="הקלידי שאלה או בקשה..." rows="2"></textarea>
+                            <button class="send-btn" id="sendBtn">שלח</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Action Modal -->
+        <div id="actionModal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3 id="actionModalTitle">פעולה נדרשת</h3>
+                    <button class="modal-close" id="actionModalClose">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div id="actionModalContent">
+                        <!-- Action content will be populated by JS -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn--secondary" id="actionModalCancel">ביטול</button>
+                    <button class="btn btn--primary" id="actionModalSave">בצע פעולה</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Email Draft Modal -->
+        <div id="emailModal" class="modal hidden">
+            <div class="modal-content email-modal">
+                <div class="modal-header">
+                    <h3 id="emailModalTitle">טיוטת מייל/מכתב</h3>
+                    <button class="modal-close" id="emailModalClose">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label class="form-label">נושא:</label>
+                        <input type="text" class="form-control" id="emailSubject">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">תוכן המכתב:</label>
+                        <textarea class="form-control" id="emailContent" rows="10"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">קבצים מצורפים נדרשים:</label>
+                        <div id="requiredAttachments" class="attachments-list">
+                            <!-- Will be populated by JS -->
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">הצעדים הבאים:</label>
+                        <div id="nextSteps" class="next-steps-list">
+                            <!-- Will be populated by JS -->
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn--secondary" id="emailModalCancel">ביטול</button>
+                    <button class="btn btn--primary" id="emailModalCopy">העתק לטקסט</button>
+                    <button class="btn btn--primary" id="emailModalSend">שלח מייל</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="document-processor.js"></script>
+    <script src="email-processor.js"></script>
+    <script src="app-fixed.js"></script>
+</body>
+</html>

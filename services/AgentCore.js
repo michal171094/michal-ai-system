@@ -162,6 +162,16 @@ class PriorityEngine {
             if (balance < 1000) add('יתרה נמוכה (<1000)', 30, { balance });
             if (balance < (item.amount || 0)) add('יתרה נמוכה מהחוב', 15, { balance, amount: item.amount });
         }
+        // Recent email linkage signals
+        if (item.lastEmailAt) {
+            const ageHours = (Date.now() - new Date(item.lastEmailAt).getTime())/3600000;
+            if (ageHours <= 48) add('אימייל עדכני (<48h)', 15, { hours: Math.round(ageHours) });
+            else if (ageHours <= 168) add('אימייל אחרון (<7d)', 5, { hours: Math.round(ageHours) });
+        }
+        if (item.emailCount) {
+            if (item.emailCount >= 5) add('ריבוי תכתובת (≥5)', 8, { emailCount: item.emailCount });
+            else if (item.emailCount >= 3) add('תכתובת פעילה (≥3)', 5, { emailCount: item.emailCount });
+        }
         return { score: Math.round(score), breakdown };
     }
     rank(items) {
@@ -229,11 +239,49 @@ class AgentCore {
     }
     buildUnifiedItems(appData) {
         const list = [];
-        (appData.tasks||[]).forEach(t=> list.push({ id: 'task_'+t.id, domain: 'academic', title: t.project, deadline: t.deadline, status: t.status, client: t.client, action: t.action, amount: t.value, currency: t.currency }));
-        (appData.debts||[]).forEach(d=> list.push({ id: 'debt_'+d.id, domain: 'debt', title: d.company + ' - ' + d.creditor, deadline: d.deadline, status: d.status, action: d.action, amount: d.amount, currency: d.currency, case_number: d.case_number }));
-        (appData.bureaucracy||[]).forEach(b=> list.push({ id: 'bureau_'+b.id, domain: 'bureaucracy', title: b.task + ' - ' + b.authority, deadline: b.deadline, status: b.status, action: b.action }));
+        (appData.tasks||[]).forEach(t=> list.push({ id: 'task_'+t.id, domain: 'academic', title: t.project, deadline: t.deadline, status: t.status, client: t.client, action: t.action, amount: t.value, currency: t.currency, lastEmailAt: t.lastEmailAt, emailCount: t.emailCount }));
+        (appData.debts||[]).forEach(d=> list.push({ id: 'debt_'+d.id, domain: 'debt', title: d.company + ' - ' + d.creditor, deadline: d.deadline, status: d.status, action: d.action, amount: d.amount, currency: d.currency, case_number: d.case_number, lastEmailAt: d.lastEmailAt, emailCount: d.emailCount }));
+        (appData.bureaucracy||[]).forEach(b=> list.push({ id: 'bureau_'+b.id, domain: 'bureaucracy', title: b.task + ' - ' + b.authority, deadline: b.deadline, status: b.status, action: b.action, lastEmailAt: b.lastEmailAt, emailCount: b.emailCount }));
         (appData.emails||[]).forEach(e=> list.push({ id: 'email_'+e.id, domain: 'email', title: e.subject || '(ללא נושא)', deadline: null, status: 'חדש', action: 'עיבוד', from: e.from }));
         return list;
+    }
+    ingestEmails(appData, emails) {
+        if (!emails || !emails.length) return { linked:0 };
+        let linked = 0;
+        const norm = s => (s||'').toLowerCase();
+        const allEntities = [
+            ...(appData.tasks||[]).map(t=> ({ kind:'task', ref:t, label: norm(t.project + ' ' + (t.client||'')) })),
+            ...(appData.debts||[]).map(d=> ({ kind:'debt', ref:d, label: norm(d.company + ' ' + d.creditor + ' ' + (d.case_number||'')) })),
+            ...(appData.bureaucracy||[]).map(b=> ({ kind:'bureaucracy', ref:b, label: norm(b.task + ' ' + b.authority) }))
+        ];
+        emails.forEach(em => {
+            const subject = norm(em.subject);
+            const snippet = norm(em.snippet);
+            if (!subject && !snippet) return;
+            let best = null; let bestScore = 0;
+            allEntities.forEach(ent => {
+                let score = 0;
+                if (ent.ref.case_number && subject.includes(ent.ref.case_number)) score += 70;
+                if (ent.ref.case_number && snippet.includes(ent.ref.case_number)) score += 40;
+                const tokens = ent.label.split(/[^א-תa-z0-9]+/).filter(w=> w.length>2);
+                let hits = 0;
+                tokens.forEach(tok=> { if (tok && (subject.includes(tok) || snippet.includes(tok))) hits++; });
+                if (hits) score += Math.min(40, hits*5);
+                if (ent.ref.lastEmailAt) score += 5; // continuity boost
+                if (score > bestScore) { bestScore = score; best = ent; }
+            });
+            if (best && bestScore >= 30) {
+                best.ref.lastEmailAt = em.date || new Date().toISOString();
+                best.ref.emailCount = (best.ref.emailCount||0)+1;
+                linked++;
+                this.graph.upsertNode('email_'+em.id, 'email', { subject: em.subject, from: em.from, date: em.date });
+                const entId = best.kind + '_' + best.ref.id;
+                this.graph.link('email_'+em.id, entId, 'related');
+                this.memory.addEvent('email_linked', { emailId: em.id, entity: entId, score: bestScore });
+            }
+        });
+        this.memory.persist();
+        return { linked };
     }
     getPriorities(appData) {
         const unified = this.buildUnifiedItems(appData);

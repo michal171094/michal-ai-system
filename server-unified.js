@@ -79,12 +79,17 @@ app.get('/auth/google/callback', async (req,res)=> { if(!gmailService) return re
 app.post('/api/gmail/sync', async (req,res)=> {
   if (!gmailService) return res.status(503).json({ success:false, error:'Gmail disabled'});
   try {
-    const emails = await gmailService.listRecentEmails(20);
+    const emails = await gmailService.listRecentEmails(30);
     let newCount = 0;
-    const existingIds = new Set((appData.emails||[]).map(e=> e.id));
-    emails.forEach(em => { if(!existingIds.has(em.id)) { appData.emails.push({ id: em.id, subject: em.subject, from: em.from, date: em.date, snippet: em.snippet }); newCount++; } });
+    appData.emails = appData.emails || [];
+    const existingIds = new Set(appData.emails.map(e=> e.id));
+    const newEmails = [];
+    emails.forEach(em => { if(!existingIds.has(em.id)) { const simplified = { id: em.id, subject: em.subject, from: em.from, date: em.date, snippet: em.snippet }; appData.emails.push(simplified); newEmails.push(simplified); newCount++; } });
     if (newCount) { saveAppData(); AgentCore.memory.addEvent('emails_ingested', { count:newCount }); }
-    res.json({ success:true, ingested:newCount, total: appData.emails.length, priorities: AgentCore.getPriorities(appData).slice(0,15) });
+    // Link emails to existing entities for prioritization signals
+    const linkStats = AgentCore.priorityEngine.ingestEmails(appData, newEmails);
+    const priorities = AgentCore.getPriorities(appData).slice(0,20);
+    res.json({ success:true, ingested:newCount, linked: linkStats.linked, total: appData.emails.length, priorities });
   } catch (e) {
     if (e.message === 'AUTH_REQUIRED') return res.status(401).json({ success:false, auth_required:true });
     res.status(500).json({ success:false, error:e.message });

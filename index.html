@@ -98,9 +98,27 @@
                                 </div>
                             </div>
 
-                            <!-- Gmail Integration Controls -->
-                            <div class="gmail-controls">
-                                <button class="gmail-sync-btn" id="syncEmailBtn">🔄 סנכרן Gmail</button>
+                            <!-- Sync Controls -->
+                            <div class="sync-controls">
+                                <h3>🔄 סנכרון נתונים</h3>
+                                <div class="sync-buttons">
+                                    <button class="sync-btn academic" id="syncAcademicBtn" data-module="academic">
+                                        📚 אקדמיה <span class="sync-badge" id="academicBadge">0</span>
+                                    </button>
+                                    <button class="sync-btn bureaucracy" id="syncBureaucracyBtn" data-module="bureaucracy">
+                                        🏛️ בירוקרטיה <span class="sync-badge" id="bureaucracyBadge">0</span>
+                                    </button>
+                                    <button class="sync-btn debts" id="syncDebtsBtn" data-module="debts">
+                                        💰 חובות <span class="sync-badge" id="debtsBadge">0</span>
+                                    </button>
+                                    <button class="sync-btn emails" id="syncEmailsBtn" data-module="emails">
+                                        � מיילים <span class="sync-badge" id="emailsBadge">0</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Additional Controls -->
+                            <div class="additional-controls">
                                 <button class="document-process-btn" id="processDocsBtn">📄 עבד מסמכים</button>
                                 <button class="smart-recommendations-btn" id="smartRecBtn">🎯 המלצות חכמות</button>
                                 <input type="file" id="documentUpload" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none">
@@ -324,6 +342,22 @@
                     <button class="btn btn--secondary" id="emailModalCancel">ביטול</button>
                     <button class="btn btn--primary" id="emailModalCopy">העתק לטקסט</button>
                     <button class="btn btn--primary" id="emailModalSend">שלח מייל</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sync Updates Modal -->
+    <div id="syncModal" class="sync-modal">
+        <div class="sync-modal-content">
+            <div class="sync-modal-header">
+                <h3 id="syncModalTitle" class="sync-modal-title">עדכונים ממתינים</h3>
+                <button class="sync-modal-close" id="syncModalClose">&times;</button>
+            </div>
+            <div id="syncModalBody" class="sync-modal-body">
+                <div class="sync-loading">
+                    <div class="spinner"></div>
+                    <p>טוען עדכונים...</p>
                 </div>
             </div>
         </div>

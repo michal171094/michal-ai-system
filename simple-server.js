@@ -283,6 +283,297 @@ app.post('/api/chat/smart', async (req, res) => {
     }
 });
 
+// Sync API Routes - כפתורי הסנכרון
+app.get('/api/sync/academic', async (req, res) => {
+    try {
+        // סימולציה של נתונים חדשים מהמערכת האקדמית
+        const pendingUpdates = [
+            {
+                id: "academic_1",
+                type: "new_task",
+                title: "רחל - עבודה במתמטיקה",
+                details: {
+                    client: "רחל כהן",
+                    deadline: "2025-10-05",
+                    value: 2800,
+                    currency: "₪",
+                    description: "עבודה סמינריונית במתמטיקה - סטטיסטיקה"
+                },
+                action: "approve_new",
+                timestamp: "2025-09-25T10:30:00Z"
+            },
+            {
+                id: "academic_2", 
+                type: "status_update",
+                title: "כרמית - עדכון סטטוס",
+                details: {
+                    project: "כרמית - סמינר פסיכולוגיה",
+                    old_status: "בעבודה",
+                    new_status: "הושלם",
+                    payment_received: true,
+                    amount: 3500
+                },
+                action: "confirm_completion",
+                timestamp: "2025-09-25T09:15:00Z"
+            },
+            {
+                id: "academic_3",
+                type: "deadline_change",
+                title: "ישראל - דחיית דדליין",
+                details: {
+                    project: "ישראל - סמינר היסטוריה",
+                    old_deadline: "2025-09-28",
+                    new_deadline: "2025-10-03",
+                    reason: "בקשת הלקוח"
+                },
+                action: "approve_extension",
+                timestamp: "2025-09-25T08:45:00Z"
+            }
+        ];
+
+        res.json({
+            success: true,
+            module: "academic",
+            pendingUpdates: pendingUpdates,
+            count: pendingUpdates.length
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.get('/api/sync/bureaucracy', async (req, res) => {
+    try {
+        const pendingUpdates = [
+            {
+                id: "bureau_1",
+                type: "status_update",
+                title: "רישום נישואין - עדכון סטטוס",
+                details: {
+                    task: "רישום נישואין",
+                    authority: "Standesamt Berlin",
+                    old_status: "בהמתנה",
+                    new_status: "מאושר",
+                    next_step: "איסוף תעודה",
+                    appointment_date: "2025-10-02"
+                },
+                action: "confirm_approval",
+                timestamp: "2025-09-25T11:00:00Z"
+            },
+            {
+                id: "bureau_2",
+                type: "new_requirement",
+                title: "TK - מסמך נוסף נדרש",
+                details: {
+                    task: "ביטוח בריאות - אוריון",
+                    authority: "TK",
+                    required_document: "אישור הכנסה עדכני",
+                    deadline: "2025-09-30",
+                    urgency: "גבוה"
+                },
+                action: "acknowledge_requirement",
+                timestamp: "2025-09-25T10:15:00Z"
+            },
+            {
+                id: "bureau_3",
+                type: "appointment_available",
+                title: "LEA Berlin - תור פנוי",
+                details: {
+                    task: "בקשת אישור שהייה",
+                    authority: "LEA Berlin",
+                    appointment_date: "2025-09-28",
+                    appointment_time: "14:30",
+                    location: "Keplerstraße 2"
+                },
+                action: "book_appointment",
+                timestamp: "2025-09-25T09:30:00Z"
+            }
+        ];
+
+        res.json({
+            success: true,
+            module: "bureaucracy", 
+            pendingUpdates: pendingUpdates,
+            count: pendingUpdates.length
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.get('/api/sync/debts', async (req, res) => {
+    try {
+        const pendingUpdates = [
+            {
+                id: "debt_1",
+                type: "payment_plan_offer",
+                title: "PAIR Finance - הצעת תשלומים",
+                details: {
+                    creditor: "PAIR Finance",
+                    company: "Immobilien Scout",
+                    case_number: "120203581836",
+                    original_amount: 69.52,
+                    settlement_offer: 45.00,
+                    monthly_payments: 3,
+                    payment_amount: 15.00
+                },
+                action: "review_offer",
+                timestamp: "2025-09-25T12:00:00Z"
+            },
+            {
+                id: "debt_2",
+                type: "dispute_response",
+                title: "coeo Inkasso - תגובה להתנגדות",
+                details: {
+                    creditor: "coeo Inkasso",
+                    company: "Ostrom GmbH", 
+                    case_number: "1660002492",
+                    dispute_status: "נדחתה",
+                    reason: "הוכחות לא מספקות",
+                    next_action: "הגשת ערעור או תשלום"
+                },
+                action: "decide_next_step",
+                timestamp: "2025-09-25T11:30:00Z"
+            },
+            {
+                id: "debt_3",
+                type: "deadline_warning",
+                title: "רשות אכיפה - אזהרה אחרונה",
+                details: {
+                    creditor: "רשות אכיפה",
+                    company: "משרד הבטחון",
+                    case_number: "774243-03-25",
+                    amount: 7355.17,
+                    deadline: "2025-09-30",
+                    consequence: "הקפאת חשבונות בנק"
+                },
+                action: "urgent_payment_arrangement",
+                timestamp: "2025-09-25T13:15:00Z"
+            }
+        ];
+
+        res.json({
+            success: true,
+            module: "debts",
+            pendingUpdates: pendingUpdates,
+            count: pendingUpdates.length
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.get('/api/sync/emails', async (req, res) => {
+    try {
+        const pendingUpdates = [
+            {
+                id: "email_1",
+                type: "important_email",
+                title: "כרמית - בקשת שינויים",
+                details: {
+                    from: "karmit.cohen@gmail.com",
+                    subject: "שינויים נדרשים בעבודה",
+                    received: "2025-09-25T08:30:00Z",
+                    priority: "גבוה",
+                    content_summary: "בקשה לשינויים קלים בפרק השני",
+                    estimated_time: "2 שעות"
+                },
+                action: "review_changes",
+                timestamp: "2025-09-25T08:30:00Z"
+            },
+            {
+                id: "email_2",
+                type: "payment_confirmation",
+                title: "מרג'ורי - אישור תשלום",
+                details: {
+                    from: "margori.smith@email.com",
+                    subject: "Payment sent for translation work", 
+                    received: "2025-09-25T10:00:00Z",
+                    amount: 450,
+                    currency: "€",
+                    payment_method: "PayPal"
+                },
+                action: "confirm_receipt",
+                timestamp: "2025-09-25T10:00:00Z"
+            },
+            {
+                id: "email_3",
+                type: "new_inquiry",
+                title: "דוד - פנייה חדשה",
+                details: {
+                    from: "david.levi@university.ac.il",
+                    subject: "עבודה במדעי המחשב",
+                    received: "2025-09-25T14:00:00Z",
+                    project_type: "עבודה סמינריונית",
+                    deadline: "2025-10-15",
+                    estimated_value: 4000
+                },
+                action: "respond_to_inquiry",
+                timestamp: "2025-09-25T14:00:00Z"
+            }
+        ];
+
+        res.json({
+            success: true,
+            module: "emails",
+            pendingUpdates: pendingUpdates,
+            count: pendingUpdates.length
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Handle sync actions - טיפול בפעולות אישור/דחיה
+app.post('/api/sync/action', async (req, res) => {
+    try {
+        const { updateId, action, customData } = req.body;
+        
+        console.log(`🔄 פעולת סנכרון: ${action} על עדכון ${updateId}`);
+        
+        // כאן נטפל בפעולות שונות
+        let result = {};
+        
+        switch (action) {
+            case 'approve_new':
+                result = { message: 'המשימה החדשה נוספה בהצלחה', status: 'approved' };
+                break;
+            case 'confirm_completion':
+                result = { message: 'השלמת המשימה אושרה', status: 'completed' };
+                break;
+            case 'approve_extension':
+                result = { message: 'דחיית הדדליין אושרה', status: 'extended' };
+                break;
+            case 'review_offer':
+                result = { message: 'הצעת התשלומים נבדקה', status: 'under_review' };
+                break;
+            case 'book_appointment':
+                result = { message: 'התור נקבע בהצלחה', status: 'booked' };
+                break;
+            case 'urgent_payment_arrangement':
+                result = { message: 'הוגדר תיאום תשלום דחוף', status: 'arranged' };
+                break;
+            case 'dismiss':
+                result = { message: 'העדכון נדחה', status: 'dismissed' };
+                break;
+            default:
+                result = { message: 'פעולה לא מוכרת', status: 'error' };
+        }
+        
+        res.json({
+            success: true,
+            updateId: updateId,
+            action: action,
+            result: result,
+            timestamp: new Date().toISOString()
+        });
+        
+    } catch (error) {
+        console.error('שגיאה בפעולת סנכרון:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // Basic Chat Endpoint - תגובות מוכנות (גיבוי)
 app.post('/api/chat', (req, res) => {
     const { message } = req.body;

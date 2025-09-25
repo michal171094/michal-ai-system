@@ -8,7 +8,11 @@ const appData = {
         {
             id: 1,
             project: 'עבודת סמינר - פסיכולוגיה חברתית',
-            client: 'כרמית - דוקטורנטית',
+          // Sync controls
+    setupSyncControls();
+    
+    // Modal controls
+    setupModalControls(); client: 'כרמית - דוקטורנטית',
             action: 'סיים כתיבת פרק 3',
             status: 'בעבודה',
             priority: 'דחוף',
@@ -275,11 +279,11 @@ function setupEventListeners() {
         });
     });
     
-    // Gmail controls
-    const syncEmailBtn = document.getElementById('syncEmailBtn');
-    if (syncEmailBtn) {
-        syncEmailBtn.addEventListener('click', syncGmailTasks);
-    }
+    // Sync controls
+    setupSyncControls();
+    
+    // Modal controls
+    setupModalControls();
     
     const refreshSmartBtn = document.getElementById('refreshSmartBtn');
     if (refreshSmartBtn) {
@@ -916,6 +920,396 @@ function showNotification(message, type = 'info') {
             }
         }, 300);
     }, 3000);
+}
+
+// Sync Controls Functions
+function setupSyncControls() {
+    console.log('מגדיר כפתורי סנכרון...');
+    
+    // Academic sync
+    const syncAcademicBtn = document.getElementById('syncAcademicBtn');
+    if (syncAcademicBtn) {
+        syncAcademicBtn.addEventListener('click', () => openSyncModal('academic'));
+    }
+    
+    // Bureaucracy sync
+    const syncBureaucracyBtn = document.getElementById('syncBureaucracyBtn');
+    if (syncBureaucracyBtn) {
+        syncBureaucracyBtn.addEventListener('click', () => openSyncModal('bureaucracy'));
+    }
+    
+    // Debts sync
+    const syncDebtsBtn = document.getElementById('syncDebtsBtn');
+    if (syncDebtsBtn) {
+        syncDebtsBtn.addEventListener('click', () => openSyncModal('debts'));
+    }
+    
+    // Emails sync
+    const syncEmailsBtn = document.getElementById('syncEmailsBtn');
+    if (syncEmailsBtn) {
+        syncEmailsBtn.addEventListener('click', () => openSyncModal('emails'));
+    }
+    
+    // Load initial badge counts
+    loadSyncBadges();
+}
+
+function setupModalControls() {
+    console.log('מגדיר בקרי מודל...');
+    
+    const modal = document.getElementById('syncModal');
+    const closeBtn = document.getElementById('syncModalClose');
+    
+    if (closeBtn) {
+        closeBtn.addEventListener('click', closeSyncModal);
+    }
+    
+    if (modal) {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeSyncModal();
+            }
+        });
+    }
+}
+
+async function openSyncModal(module) {
+    console.log(`פותח מודל סנכרון למודול: ${module}`);
+    
+    const modal = document.getElementById('syncModal');
+    const title = document.getElementById('syncModalTitle');
+    const body = document.getElementById('syncModalBody');
+    
+    // Set title
+    const titles = {
+        'academic': '📚 עדכונים אקדמיים',
+        'bureaucracy': '🏛️ עדכוני בירוקרטיה', 
+        'debts': '💰 עדכוני חובות',
+        'emails': '📧 עדכוני מיילים'
+    };
+    
+    title.textContent = titles[module] || 'עדכונים';
+    
+    // Show loading
+    body.innerHTML = `
+        <div class="sync-loading">
+            <div class="spinner"></div>
+            <p>טוען עדכונים...</p>
+        </div>
+    `;
+    
+    // Show modal
+    modal.classList.add('show');
+    
+    try {
+        // Fetch updates
+        const response = await fetch(`/api/sync/${module}`);
+        const data = await response.json();
+        
+        if (data.success) {
+            displaySyncUpdates(data.pendingUpdates, module);
+        } else {
+            showSyncError('שגיאה בטעינת העדכונים');
+        }
+        
+    } catch (error) {
+        console.error('שגיאה בטעינת עדכוני סנכרון:', error);
+        showSyncError('שגיאה בחיבור לשרת');
+    }
+}
+
+function displaySyncUpdates(updates, module) {
+    const body = document.getElementById('syncModalBody');
+    
+    if (!updates || updates.length === 0) {
+        body.innerHTML = `
+            <div class="sync-no-updates">
+                <div class="icon">✅</div>
+                <h4>אין עדכונים חדשים</h4>
+                <p>כל העדכונים עודכנו</p>
+            </div>
+        `;
+        return;
+    }
+    
+    const updatesHtml = updates.map(update => `
+        <div class="sync-update-item" data-id="${update.id}">
+            <div class="sync-update-header">
+                <h4 class="sync-update-title">${update.title}</h4>
+                <span class="sync-update-type ${update.type}">${getTypeLabel(update.type)}</span>
+            </div>
+            
+            <div class="sync-update-details">
+                ${formatUpdateDetails(update.details, update.type)}
+            </div>
+            
+            <div class="sync-update-actions">
+                ${getActionButtons(update.action, update.id)}
+            </div>
+            
+            <div class="sync-timestamp">
+                ${formatTimestamp(update.timestamp)}
+            </div>
+        </div>
+    `).join('');
+    
+    body.innerHTML = `
+        <div class="sync-updates-list">
+            ${updatesHtml}
+        </div>
+    `;
+    
+    // Add event listeners to action buttons
+    setupActionButtons();
+}
+
+function getTypeLabel(type) {
+    const labels = {
+        'new_task': 'משימה חדשה',
+        'status_update': 'עדכון סטטוס',
+        'deadline_change': 'שינוי דדליין',
+        'payment_plan_offer': 'הצעת תשלומים',
+        'dispute_response': 'תגובה להתנגדות',
+        'deadline_warning': 'אזהרת דדליין',
+        'important_email': 'מייל חשוב',
+        'payment_confirmation': 'אישור תשלום',
+        'new_inquiry': 'פנייה חדשה',
+        'new_requirement': 'דרישה חדשה',
+        'appointment_available': 'תור פנוי'
+    };
+    return labels[type] || type;
+}
+
+function formatUpdateDetails(details, type) {
+    let html = '';
+    
+    Object.entries(details).forEach(([key, value]) => {
+        if (key === 'content_summary') return; // Skip long content
+        
+        const label = getFieldLabel(key);
+        if (label && value) {
+            html += `<p><strong>${label}:</strong> ${value}</p>`;
+        }
+    });
+    
+    return html;
+}
+
+function getFieldLabel(field) {
+    const labels = {
+        'client': 'לקוח',
+        'deadline': 'דדליין',
+        'value': 'סכום',
+        'currency': 'מטבע',
+        'project': 'פרויקט',
+        'old_status': 'סטטוס קודם',
+        'new_status': 'סטטוס חדש',
+        'payment_received': 'תשלום התקבל',
+        'amount': 'סכום',
+        'old_deadline': 'דדליין קודם',
+        'new_deadline': 'דדליין חדש',
+        'reason': 'סיבה',
+        'task': 'משימה',
+        'authority': 'רשות',
+        'next_step': 'שלב הבא',
+        'appointment_date': 'תאריך תור',
+        'creditor': 'נושה',
+        'company': 'חברה',
+        'case_number': 'מספר תיק',
+        'original_amount': 'סכום מקורי',
+        'settlement_offer': 'הצעת פשרה',
+        'monthly_payments': 'תשלומים חודשיים',
+        'payment_amount': 'סכום תשלום',
+        'dispute_status': 'סטטוס התנגדות',
+        'consequence': 'השלכות',
+        'from': 'מאת',
+        'subject': 'נושא',
+        'received': 'התקבל',
+        'priority': 'עדיפות',
+        'estimated_time': 'זמן משוער',
+        'payment_method': 'אמצעי תשלום',
+        'project_type': 'סוג פרויקט',
+        'estimated_value': 'ערך משוער',
+        'required_document': 'מסמך נדרש',
+        'urgency': 'דחיפות',
+        'appointment_time': 'שעת תור',
+        'location': 'מיקום'
+    };
+    
+    return labels[field];
+}
+
+function getActionButtons(action, updateId) {
+    const actionButtons = {
+        'approve_new': `
+            <button class="sync-action-btn approve" onclick="handleSyncAction('${updateId}', 'approve_new')">אשר הוספה</button>
+            <button class="sync-action-btn dismiss" onclick="handleSyncAction('${updateId}', 'dismiss')">התעלם</button>
+        `,
+        'confirm_completion': `
+            <button class="sync-action-btn approve" onclick="handleSyncAction('${updateId}', 'confirm_completion')">אשר השלמה</button>
+            <button class="sync-action-btn reject" onclick="handleSyncAction('${updateId}', 'reject_completion')">דחה</button>
+        `,
+        'approve_extension': `
+            <button class="sync-action-btn approve" onclick="handleSyncAction('${updateId}', 'approve_extension')">אשר דחייה</button>
+            <button class="sync-action-btn reject" onclick="handleSyncAction('${updateId}', 'reject_extension')">דחה דחייה</button>
+        `,
+        'review_offer': `
+            <button class="sync-action-btn review" onclick="handleSyncAction('${updateId}', 'accept_offer')">קבל הצעה</button>
+            <button class="sync-action-btn reject" onclick="handleSyncAction('${updateId}', 'reject_offer')">דחה הצעה</button>
+            <button class="sync-action-btn dismiss" onclick="handleSyncAction('${updateId}', 'counter_offer')">הצעה נגדית</button>
+        `,
+        'decide_next_step': `
+            <button class="sync-action-btn review" onclick="handleSyncAction('${updateId}', 'appeal')">הגש ערעור</button>
+            <button class="sync-action-btn approve" onclick="handleSyncAction('${updateId}', 'pay_debt')">שלם חוב</button>
+            <button class="sync-action-btn dismiss" onclick="handleSyncAction('${updateId}', 'ignore')">התעלם</button>
+        `,
+        'urgent_payment_arrangement': `
+            <button class="sync-action-btn approve" onclick="handleSyncAction('${updateId}', 'urgent_payment_arrangement')">תאם תשלום דחוף</button>
+            <button class="sync-action-btn review" onclick="handleSyncAction('${updateId}', 'contact_lawyer')">צור קשר עם עורך דין</button>
+        `,
+        'review_changes': `
+            <button class="sync-action-btn approve" onclick="handleSyncAction('${updateId}', 'accept_changes')">אשר שינויים</button>
+            <button class="sync-action-btn reject" onclick="handleSyncAction('${updateId}', 'reject_changes')">דחה שינויים</button>
+        `,
+        'confirm_receipt': `
+            <button class="sync-action-btn approve" onclick="handleSyncAction('${updateId}', 'confirm_receipt')">אשר קבלה</button>
+        `,
+        'respond_to_inquiry': `
+            <button class="sync-action-btn approve" onclick="handleSyncAction('${updateId}', 'respond_inquiry')">השב לפנייה</button>
+            <button class="sync-action-btn dismiss" onclick="handleSyncAction('${updateId}', 'ignore_inquiry')">התעלם</button>
+        `,
+        'confirm_approval': `
+            <button class="sync-action-btn approve" onclick="handleSyncAction('${updateId}', 'confirm_approval')">אשר</button>
+        `,
+        'acknowledge_requirement': `
+            <button class="sync-action-btn approve" onclick="handleSyncAction('${updateId}', 'acknowledge_requirement')">קבל דרישה</button>
+            <button class="sync-action-btn review" onclick="handleSyncAction('${updateId}', 'clarify_requirement')">בקש הבהרה</button>
+        `,
+        'book_appointment': `
+            <button class="sync-action-btn approve" onclick="handleSyncAction('${updateId}', 'book_appointment')">קבע תור</button>
+            <button class="sync-action-btn dismiss" onclick="handleSyncAction('${updateId}', 'find_other_time')">חפש זמן אחר</button>
+        `
+    };
+    
+    return actionButtons[action] || `
+        <button class="sync-action-btn dismiss" onclick="handleSyncAction('${updateId}', 'dismiss')">סמן כנקרא</button>
+    `;
+}
+
+async function handleSyncAction(updateId, action) {
+    console.log(`מטפל בפעולה: ${action} על עדכון ${updateId}`);
+    
+    try {
+        const response = await fetch('/api/sync/action', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                updateId: updateId,
+                action: action
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Remove the update item from display
+            const updateItem = document.querySelector(`[data-id="${updateId}"]`);
+            if (updateItem) {
+                updateItem.style.opacity = '0.5';
+                updateItem.style.transform = 'scale(0.95)';
+                setTimeout(() => {
+                    updateItem.remove();
+                    
+                    // Check if no more updates
+                    const remainingUpdates = document.querySelectorAll('.sync-update-item');
+                    if (remainingUpdates.length === 0) {
+                        displaySyncUpdates([], '');
+                    }
+                }, 300);
+            }
+            
+            showNotification(`פעולה בוצעה בהצלחה: ${data.result.message}`, 'success');
+            
+            // Refresh badge counts
+            loadSyncBadges();
+            
+        } else {
+            showNotification('שגיאה בביצוע הפעולה', 'error');
+        }
+        
+    } catch (error) {
+        console.error('שגיאה בביצוע פעולה:', error);
+        showNotification('שגיאה בחיבור לשרת', 'error');
+    }
+}
+
+function setupActionButtons() {
+    // Action buttons are set up with onclick handlers in getActionButtons()
+}
+
+function closeSyncModal() {
+    const modal = document.getElementById('syncModal');
+    modal.classList.remove('show');
+}
+
+function showSyncError(message) {
+    const body = document.getElementById('syncModalBody');
+    body.innerHTML = `
+        <div class="sync-no-updates">
+            <div class="icon">❌</div>
+            <h4>שגיאה</h4>
+            <p>${message}</p>
+        </div>
+    `;
+}
+
+async function loadSyncBadges() {
+    try {
+        // Load badge counts for all modules
+        const modules = ['academic', 'bureaucracy', 'debts', 'emails'];
+        
+        for (const module of modules) {
+            const response = await fetch(`/api/sync/${module}`);
+            const data = await response.json();
+            
+            if (data.success) {
+                const badge = document.getElementById(`${module}Badge`);
+                const count = data.count || 0;
+                
+                if (badge) {
+                    badge.textContent = count;
+                    const button = badge.closest('.sync-btn');
+                    
+                    if (count > 0) {
+                        button.classList.add('has-updates');
+                    } else {
+                        button.classList.remove('has-updates');
+                    }
+                }
+            }
+        }
+        
+    } catch (error) {
+        console.error('שגיאה בטעינת תגי סנכרון:', error);
+    }
+}
+
+function formatTimestamp(timestamp) {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    
+    if (diffHours < 1) {
+        const diffMins = Math.floor(diffMs / (1000 * 60));
+        return `לפני ${diffMins} דקות`;
+    } else if (diffHours < 24) {
+        return `לפני ${diffHours} שעות`;
+    } else {
+        return date.toLocaleDateString('he-IL');
+    }
 }
 
 console.log('האפליקציה החכמה של מיכל עובדת בהצלחה! 🚀🧠');

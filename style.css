@@ -2118,8 +2118,110 @@ body {
     line-height: 1.2;
 }
 
-/* Gmail Integration Controls */
-.gmail-controls {
+/* Sync Controls */
+.sync-controls {
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 12px;
+    padding: 20px;
+    margin: 20px 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.sync-controls h3 {
+    margin: 0 0 15px 0;
+    color: var(--color-text);
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.sync-buttons {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.sync-btn {
+    position: relative;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    border: none;
+    padding: 14px 20px;
+    border-radius: 10px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    min-width: 140px;
+    justify-content: center;
+    text-transform: none;
+}
+
+.sync-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
+.sync-btn.academic {
+    background: linear-gradient(135deg, #4f46e5, #7c3aed);
+}
+
+.sync-btn.academic:hover {
+    box-shadow: 0 6px 20px rgba(79, 70, 229, 0.4);
+}
+
+.sync-btn.bureaucracy {
+    background: linear-gradient(135deg, #059669, #047857);
+}
+
+.sync-btn.bureaucracy:hover {
+    box-shadow: 0 6px 20px rgba(5, 150, 105, 0.4);
+}
+
+.sync-btn.debts {
+    background: linear-gradient(135deg, #dc2626, #b91c1c);
+}
+
+.sync-btn.debts:hover {
+    box-shadow: 0 6px 20px rgba(220, 38, 38, 0.4);
+}
+
+.sync-btn.emails {
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+}
+
+.sync-btn.emails:hover {
+    box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4);
+}
+
+.sync-badge {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    border-radius: 12px;
+    padding: 2px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-left: 8px;
+    min-width: 18px;
+    text-align: center;
+}
+
+.sync-btn.has-updates .sync-badge {
+    background: #fbbf24;
+    color: #92400e;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+}
+
+/* Additional Controls */
+.additional-controls {
     display: flex;
     gap: 10px;
     margin: 20px 0;
@@ -2169,6 +2271,248 @@ body {
 .upload-document-btn:hover {
     background: linear-gradient(135deg, #dd6b20, #c05621);
     box-shadow: 0 4px 12px rgba(221, 107, 32, 0.3);
+}
+
+/* Sync Updates Modal */
+.sync-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.7);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    backdrop-filter: blur(4px);
+}
+
+.sync-modal.show {
+    display: flex;
+}
+
+.sync-modal-content {
+    background: white;
+    border-radius: 16px;
+    padding: 30px;
+    max-width: 700px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+    position: relative;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+
+.sync-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 25px;
+    padding-bottom: 15px;
+    border-bottom: 2px solid #f3f4f6;
+}
+
+.sync-modal-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--color-text);
+    margin: 0;
+}
+
+.sync-modal-close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: #6b7280;
+    padding: 5px;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.sync-modal-close:hover {
+    background: #f3f4f6;
+    color: var(--color-text);
+}
+
+.sync-updates-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.sync-update-item {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 20px;
+    transition: all 0.2s ease;
+}
+
+.sync-update-item:hover {
+    border-color: #d1d5db;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.sync-update-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+}
+
+.sync-update-title {
+    font-weight: 600;
+    color: var(--color-text);
+    font-size: 16px;
+    margin: 0;
+}
+
+.sync-update-type {
+    background: #e0e7ff;
+    color: #3730a3;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.sync-update-type.new_task {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.sync-update-type.status_update {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+.sync-update-type.deadline_change {
+    background: #fed7aa;
+    color: #c2410c;
+}
+
+.sync-update-type.payment_plan_offer {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.sync-update-type.urgent_payment_arrangement {
+    background: #fecaca;
+    color: #b91c1c;
+}
+
+.sync-update-details {
+    background: white;
+    border-radius: 8px;
+    padding: 15px;
+    margin: 12px 0;
+    border-left: 4px solid #3b82f6;
+}
+
+.sync-update-details p {
+    margin: 6px 0;
+    color: var(--color-text-secondary);
+    font-size: 14px;
+}
+
+.sync-update-details strong {
+    color: var(--color-text);
+    font-weight: 600;
+}
+
+.sync-update-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+    flex-wrap: wrap;
+}
+
+.sync-action-btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-transform: none;
+}
+
+.sync-action-btn.approve {
+    background: #059669;
+    color: white;
+}
+
+.sync-action-btn.approve:hover {
+    background: #047857;
+}
+
+.sync-action-btn.reject {
+    background: #dc2626;
+    color: white;
+}
+
+.sync-action-btn.reject:hover {
+    background: #b91c1c;
+}
+
+.sync-action-btn.review {
+    background: #2563eb;
+    color: white;
+}
+
+.sync-action-btn.review:hover {
+    background: #1d4ed8;
+}
+
+.sync-action-btn.dismiss {
+    background: #6b7280;
+    color: white;
+}
+
+.sync-action-btn.dismiss:hover {
+    background: #4b5563;
+}
+
+.sync-timestamp {
+    font-size: 12px;
+    color: #9ca3af;
+    margin-top: 10px;
+}
+
+.sync-no-updates {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--color-text-secondary);
+}
+
+.sync-no-updates .icon {
+    font-size: 48px;
+    margin-bottom: 15px;
+}
+
+.sync-loading {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--color-text-secondary);
+}
+
+.sync-loading .spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #f3f4f6;
+    border-top: 4px solid #3b82f6;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 0 auto 15px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
 }
 
 /* Smart Recommendations Panel */

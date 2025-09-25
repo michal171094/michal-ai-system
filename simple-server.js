@@ -7,6 +7,7 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 const AI_AGENT_URL = process.env.AI_AGENT_URL || 'http://localhost:8000';
+const AgentCore = require('./services/AgentCore');
 
 // Enable CORS
 app.use(cors());
@@ -16,6 +17,21 @@ app.use(express.json());
 
 // Serve static files (your HTML, CSS, JS)
 app.use(express.static('.'));
+
+// ---------- AgentCore bootstrap (initial ingest of mock data) ----------
+let INITIAL_DATA_INGESTED = false;
+function ensureInitialIngest() {
+    if (!INITIAL_DATA_INGESTED) {
+        try {
+            AgentCore.ingestInitial(appData);
+            INITIAL_DATA_INGESTED = true;
+            console.log('🤖 AgentCore initial data ingested');
+        } catch (e) {
+            console.error('⚠️ Failed ingest initial data:', e.message);
+        }
+    }
+}
+ensureInitialIngest();
 
 // Mock data - Full Data Set
 const appData = {
@@ -246,6 +262,68 @@ app.get('/api/auth/me', (req, res) => {
 // Health check
 app.get('/api/health', (req, res) => {
     res.json({ status: 'OK', timestamp: new Date().toISOString() });
+});
+
+// ---------- AgentCore intelligent orchestration endpoints ----------
+app.post('/api/agent/finance/balance', (req, res) => {
+    try {
+        const { balance } = req.body;
+        if (typeof balance !== 'number') return res.status(400).json({ success:false, error: 'balance must be number'});
+        AgentCore.updateFinancialBalance(balance);
+        res.json({ success: true, stored: balance });
+    } catch (e) {
+        res.status(500).json({ success:false, error: e.message });
+    }
+});
+
+app.get('/api/agent/priorities', (req, res) => {
+    try {
+        ensureInitialIngest();
+        const ranked = AgentCore.getPriorities(appData);
+        res.json({ success:true, data: ranked });
+    } catch (e) {
+        res.status(500).json({ success:false, error: e.message });
+    }
+});
+
+app.get('/api/agent/questions', (req, res) => {
+    try {
+        const questions = AgentCore.generateQuestions(appData);
+        res.json({ success:true, data: questions });
+    } catch (e) {
+        res.status(500).json({ success:false, error: e.message });
+    }
+});
+
+app.post('/api/agent/questions/:id/answer', (req, res) => {
+    try {
+        const { id } = req.params;
+        const { answer } = req.body;
+        const ok = AgentCore.memory.answerQuestion(id, answer);
+        AgentCore.memory.persist();
+        res.json({ success: ok, id, answer });
+    } catch (e) {
+        res.status(500).json({ success:false, error: e.message });
+    }
+});
+
+app.post('/api/agent/sync/simulate', (req, res) => {
+    try {
+        const { sources } = req.body || {};
+        const stats = AgentCore.runSyncSimulation(sources);
+        res.json({ success:true, data: stats });
+    } catch (e) {
+        res.status(500).json({ success:false, error: e.message });
+    }
+});
+
+app.get('/api/agent/state', (req, res) => {
+    try {
+        const snap = AgentCore.stateSnapshot(appData);
+        res.json({ success:true, data: snap });
+    } catch (e) {
+        res.status(500).json({ success:false, error: e.message });
+    }
 });
 
 // Smart Chat Endpoint - מחובר לסוכן החכם

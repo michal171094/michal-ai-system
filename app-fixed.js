@@ -8,11 +8,7 @@ const appData = {
         {
             id: 1,
             project: 'עבודת סמינר - פסיכולוגיה חברתית',
-          // Sync controls
-    setupSyncControls();
-    
-    // Modal controls
-    setupModalControls(); client: 'כרמית - דוקטורנטית',
+            client: 'כרמית - דוקטורנטית',
             action: 'סיים כתיבת פרק 3',
             status: 'בעבודה',
             priority: 'דחוף',
@@ -261,6 +257,19 @@ document.addEventListener('DOMContentLoaded', function() {
     // Populate initial data
     populateData();
     
+    // Initialize sync controls after everything is loaded
+    setTimeout(() => {
+        if (typeof setupSyncControls === 'function') {
+            setupSyncControls();
+        }
+        if (typeof setupModalControls === 'function') {
+            setupModalControls();
+        }
+        if (typeof loadSyncBadges === 'function') {
+            loadSyncBadges();
+        }
+    }, 100);
+    
     console.log('המערכת מוכנה לעבודה! 🚀');
 });
 
@@ -278,12 +287,6 @@ function setupEventListeners() {
             switchTab(this.dataset.tab);
         });
     });
-    
-    // Sync controls
-    setupSyncControls();
-    
-    // Modal controls
-    setupModalControls();
     
     const refreshSmartBtn = document.getElementById('refreshSmartBtn');
     if (refreshSmartBtn) {

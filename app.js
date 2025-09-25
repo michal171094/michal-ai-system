@@ -344,7 +344,7 @@ function setupSyncControls() {
         { id: 'syncAcademicBtn', module: 'academic' },
         { id: 'syncBureaucracyBtn', module: 'bureaucracy' },
         { id: 'syncDebtsBtn', module: 'debts' },
-        { id: 'syncEmailsBtn', module: 'emails' }
+        { id: 'syncEmailBtn', module: 'emails' }
     ];
     
     syncButtons.forEach(({ id, module }) => {

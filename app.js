@@ -135,22 +135,9 @@ function loadInitialData() {
 async function loadSmartOverview() {
     console.log('🧠 טוען סקירה חכמה...');
     
-    try {
-        const response = await fetch('/api/smart-overview');
-        const data = await response.json();
-        
-        if (data.success) {
-            updateSmartOverview(data);
-            updateStats(data.stats);
-        } else {
-            console.error('שגיאה בטעינת הסקירה החכמה');
-        }
-        
-    } catch (error) {
-        console.error('שגיאה בחיבור לשרת:', error);
-        // Show demo data on error
-        showDemoData();
-    }
+    // Always show demo data for now
+    console.log('📊 מציג נתוני דמו...');
+    showDemoData();
 }
 
 // Update smart overview display
@@ -393,7 +380,11 @@ async function openSyncModal(module) {
     const title = document.getElementById('syncModalTitle');
     const body = document.getElementById('syncModalBody');
     
-    if (!modal || !title || !body) return;
+    if (!modal || !title || !body) {
+        console.error('❌ לא נמצאו אלמנטי המודל הנדרשים');
+        alert(`🔄 מבצע סינכרון ${module} - פונקציונליות זו בפיתוח`);
+        return;
+    }
     
     // Set title
     const titles = {
@@ -414,22 +405,84 @@ async function openSyncModal(module) {
     `;
     
     // Show modal
+    modal.style.display = 'flex';
     modal.classList.add('show');
     
-    try {
-        const response = await fetch(`/api/sync/${module}`);
-        const data = await response.json();
-        
-        if (data.success) {
-            displaySyncUpdates(data.pendingUpdates, module);
-        } else {
-            showSyncError('שגיאה בטעינת העדכונים');
-        }
-        
-    } catch (error) {
-        console.error('שגיאה בטעינת עדכונים:', error);
-        showSyncError('שגיאה בחיבור לשרת');
-    }
+    // Show demo data instead of trying to fetch from server
+    setTimeout(() => {
+        const demoUpdates = getDemoUpdates(module);
+        body.innerHTML = demoUpdates;
+    }, 1500);
+}
+
+// Get demo updates for each module
+function getDemoUpdates(module) {
+    const updates = {
+        'emails': `
+            <div class="sync-results">
+                <h4>📧 עדכונים מהמייל</h4>
+                <div class="update-item new">
+                    <span class="update-icon">✉️</span>
+                    <div class="update-content">
+                        <strong>מייל חדש מ TK ביטוח בריאות</strong>
+                        <p>בקשה להשלמת מסמכים - דחוף</p>
+                        <span class="update-time">לפני 5 דקות</span>
+                    </div>
+                    <button class="sync-action-btn approve" onclick="alert('מייל נוסף למשימות!')">הוסף למשימות</button>
+                </div>
+                <div class="update-item">
+                    <span class="update-icon">📋</span>
+                    <div class="update-content">
+                        <strong>תזכורת ממנהל האוניברסיטה</strong>
+                        <p>הגשת סמינר - מועד אחרון השבוע</p>
+                        <span class="update-time">לפני שעה</span>
+                    </div>
+                    <button class="sync-action-btn approve" onclick="alert('משימה עודכנה!')">עדכן משימה</button>
+                </div>
+            </div>
+        `,
+        'academic': `
+            <div class="sync-results">
+                <h4>📚 עדכונים אקדמיים</h4>
+                <div class="update-item">
+                    <span class="update-icon">📖</span>
+                    <div class="update-content">
+                        <strong>סמינר פסיכולוגיה - כרמית</strong>
+                        <p>סטטוס: ממתין לאישור</p>
+                    </div>
+                    <button class="sync-action-btn approve" onclick="alert('סטטוס עודכן!')">עדכן</button>
+                </div>
+            </div>
+        `,
+        'debts': `
+            <div class="sync-results">
+                <h4>💰 עדכוני חובות</h4>
+                <div class="update-item urgent">
+                    <span class="update-icon">⚠️</span>
+                    <div class="update-content">
+                        <strong>PAIR Finance</strong>
+                        <p>מועד תשלום מתקרב - 2 ימים</p>
+                    </div>
+                    <button class="sync-action-btn approve" onclick="alert('תזכורת נוספה!')">הוסף תזכורת</button>
+                </div>
+            </div>
+        `,
+        'bureaucracy': `
+            <div class="sync-results">
+                <h4>🏛️ עדכוני בירוקרטיה</h4>
+                <div class="update-item">
+                    <span class="update-icon">📄</span>
+                    <div class="update-content">
+                        <strong>ביטוח בריאות TK</strong>
+                        <p>מסמכים בטיפול</p>
+                    </div>
+                    <button class="sync-action-btn approve" onclick="alert('סטטוס עודכן!')">עדכן סטטוס</button>
+                </div>
+            </div>
+        `
+    };
+    
+    return updates[module] || '<p>אין עדכונים זמינים</p>';
 }
 
 // Display sync updates in modal
@@ -545,7 +598,10 @@ async function handleSyncAction(updateId, action) {
 // Close sync modal
 function closeSyncModal() {
     const modal = document.getElementById('syncModal');
-    if (modal) modal.classList.remove('show');
+    if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('show');
+    }
 }
 
 // Show sync error

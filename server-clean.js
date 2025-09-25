@@ -615,7 +615,27 @@ app.use((err, req, res, next) => {
 // Serve main page
 app.get('/', (req, res) => {
     console.log('📄 Serving index.html for root path');
-    res.sendFile(path.join(__dirname, 'index.html'));
+    console.log('📁 Current directory:', __dirname);
+    console.log('📋 Index file exists:', require('fs').existsSync(path.join(__dirname, 'index.html')));
+    
+    const indexPath = path.join(__dirname, 'index.html');
+    if (!require('fs').existsSync(indexPath)) {
+        console.error('❌ index.html not found at:', indexPath);
+        return res.status(404).json({ error: 'index.html not found', path: indexPath });
+    }
+    
+    res.sendFile(indexPath);
+});
+
+// Debug route
+app.get('/debug', (req, res) => {
+    const fs = require('fs');
+    res.json({
+        currentDir: __dirname,
+        indexExists: fs.existsSync(path.join(__dirname, 'index.html')),
+        files: fs.readdirSync(__dirname).filter(f => f.endsWith('.html')),
+        environment: process.env.NODE_ENV
+    });
 });
 
 // Health check endpoint

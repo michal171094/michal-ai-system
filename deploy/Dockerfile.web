@@ -16,5 +16,9 @@ ENV PORT=3000
 # Expose the port for the web server
 EXPOSE 3000
 
-# Run the main server
-CMD ["node", "server-clean.js"]
+# Run the unified intelligent server (updated from legacy server-clean.js)
+CMD ["node", "server-unified.js"]
+
+# Container health check hitting the unified server health endpoint
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+	CMD wget -qO- http://localhost:3000/api/health || exit 1

@@ -109,7 +109,7 @@ class PriorityEngine {
         // Provide explainable breakdown of each contributing factor
         let score = 0;
         const breakdown = [];
-        const add = (label, points, meta) => { if (points) { score += points; breakdown.push({ label, points, meta }); } };
+        const add = (label, points, meta, category) => { if (points) { score += points; breakdown.push({ label, points, meta, category }); } };
         const now = Date.now();
         // Deadline urgency
         if (item.deadline) {
@@ -121,13 +121,13 @@ class PriorityEngine {
             else if (diffDays <= 3) { pts = 85; bucket = '≤3d'; }
             else if (diffDays <= 7) { pts = 60; bucket = '≤7d'; }
             else if (diffDays <= 14) { pts = 40; bucket = '≤14d'; }
-            add('דדליין', pts, { diffDays: Number(diffDays.toFixed(2)), bucket });
+            add('דדליין', pts, { diffDays: Number(diffDays.toFixed(2)), bucket }, 'deadline');
         } else {
-            add('אין דדליין', 10);
+            add('אין דדליין', 10, {}, 'deadline');
         }
         // Domain weighting
         const domainWeights = { debt: 40, bureaucracy: 30, academic: 20, email: 15 };
-        add('דומיין', domainWeights[item.domain] || 10, { domain: item.domain });
+        add('דומיין', domainWeights[item.domain] || 10, { domain: item.domain }, 'domain');
         // Financial impact
         if (item.amount) {
             const amt = Number(item.amount) || 0;
@@ -136,7 +136,7 @@ class PriorityEngine {
             else if (amt > 1000) { pts = 35; tier = '>1000'; }
             else if (amt > 300) { pts = 20; tier = '>300'; }
             else if (amt > 0) { pts = 10; tier = '>0'; }
-            add('סכום כספי', pts, { amount: amt, tier });
+            add('סכום כספי', pts, { amount: amt, tier }, 'finance');
         }
         // Status urgency (expanded Hebrew statuses)
         const statusWeights = {
@@ -151,26 +151,26 @@ class PriorityEngine {
             'מאושר': 5,
             'המתנה לאישור': 15
         };
-        add('סטטוס', statusWeights[item.status] || 5, { status: item.status });
+        add('סטטוס', statusWeights[item.status] || 5, { status: item.status }, 'status');
         // VIP client influence
         if (item.client && this.graph.getNode('client_'+item.client)?.props?.tier === 'VIP') {
-            add('לקוח VIP', 25, { client: item.client });
+            add('לקוח VIP', 25, { client: item.client }, 'context');
         }
         // Balance pressure (only for debts)
         const balance = this.memory.facts.get('finance.currentBalance')?.value;
         if (balance !== undefined && item.domain === 'debt') {
-            if (balance < 1000) add('יתרה נמוכה (<1000)', 30, { balance });
-            if (balance < (item.amount || 0)) add('יתרה נמוכה מהחוב', 15, { balance, amount: item.amount });
+            if (balance < 1000) add('יתרה נמוכה (<1000)', 30, { balance }, 'finance');
+            if (balance < (item.amount || 0)) add('יתרה נמוכה מהחוב', 15, { balance, amount: item.amount }, 'finance');
         }
         // Recent email linkage signals
         if (item.lastEmailAt) {
             const ageHours = (Date.now() - new Date(item.lastEmailAt).getTime())/3600000;
-            if (ageHours <= 48) add('אימייל עדכני (<48h)', 15, { hours: Math.round(ageHours) });
-            else if (ageHours <= 168) add('אימייל אחרון (<7d)', 5, { hours: Math.round(ageHours) });
+            if (ageHours <= 48) add('אימייל עדכני (<48h)', 15, { hours: Math.round(ageHours) }, 'communication');
+            else if (ageHours <= 168) add('אימייל אחרון (<7d)', 5, { hours: Math.round(ageHours) }, 'communication');
         }
         if (item.emailCount) {
-            if (item.emailCount >= 5) add('ריבוי תכתובת (≥5)', 8, { emailCount: item.emailCount });
-            else if (item.emailCount >= 3) add('תכתובת פעילה (≥3)', 5, { emailCount: item.emailCount });
+            if (item.emailCount >= 5) add('ריבוי תכתובת (≥5)', 8, { emailCount: item.emailCount }, 'communication');
+            else if (item.emailCount >= 3) add('תכתובת פעילה (≥3)', 5, { emailCount: item.emailCount }, 'communication');
         }
         return { score: Math.round(score), breakdown };
     }
@@ -312,6 +312,22 @@ class AgentCore {
             knowledgeGraph: this.graph.snapshot(),
             lastSync: this.lastSyncStats,
             prioritiesPreview: this.getPriorities(appData).slice(0,10)
+        };
+    }
+    metrics(appData) {
+        const unified = this.buildUnifiedItems(appData);
+        return {
+            ts: new Date().toISOString(),
+            counts: {
+                tasks: appData.tasks?.length||0,
+                debts: appData.debts?.length||0,
+                bureaucracy: appData.bureaucracy?.length||0,
+                emails: appData.emails?.length||0,
+                unified: unified.length
+            },
+            recentEvents: this.memory.events.slice(-5).map(e=>({type:e.type, ts:e.timestamp})),
+            memoryFacts: Object.fromEntries(this.memory.facts),
+            graph: { nodes: this.graph.nodes.size, edges: this.graph.edges.length }
         };
     }
     buildEmailClassifier() {

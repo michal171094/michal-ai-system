@@ -2,11 +2,15 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
 const GmailService = require('./services/GmailService');
 const AgentCore = require('./services/AgentCore');
+const multer = require('multer');
+const FormData = require('form-data');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -14,6 +18,14 @@ const AI_AGENT_URL = process.env.AI_AGENT_URL || 'http://localhost:8000';
 
 app.use(cors());
 app.use(express.json());
+// Basic security hardening
+app.use(helmet({ crossOriginResourcePolicy: false }));
+const apiLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100, standardHeaders: true, legacyHeaders: false });
+app.use('/api/', apiLimiter);
+
+// File upload (OCR) setup
+const upload = multer({ dest: 'uploads/', limits: { fileSize: 10 * 1024 * 1024 } });
+if (!fs.existsSync('uploads')) fs.mkdirSync('uploads');
 app.use(express.static('.'));
 
 // Data persistence for primary domain data
@@ -69,6 +81,8 @@ app.get('/api/agent/questions', (req,res)=> { try { const q = AgentCore.generate
 app.post('/api/agent/questions/:id/answer', (req,res)=> { const ok = AgentCore.memory.answerQuestion(req.params.id, req.body.answer); AgentCore.memory.persist(); res.json({success:ok}); });
 app.post('/api/agent/sync/simulate', (req,res)=> { res.json({success:true, data: AgentCore.runSyncSimulation(req.body?.sources)}); });
 app.get('/api/agent/state', (req,res)=> { res.json({success:true, data: AgentCore.stateSnapshot(appData)}); });
+// Metrics endpoint
+app.get('/api/agent/metrics', (req,res)=> { try { res.json({ success:true, data: AgentCore.metrics(appData) }); } catch(e){ res.status(500).json({success:false,error:e.message}); } });
 // Auto actions suggestions
 app.get('/api/agent/auto-actions', (req,res)=> { try { const acts = AgentCore.generateAutoActions(appData); res.json({success:true, data:acts}); } catch(e){ res.status(500).json({success:false,error:e.message}); } });
 
@@ -108,7 +122,49 @@ app.get('/api/emails', (req,res)=> {
       const needle = q.toLowerCase();
       emails = emails.filter(e => (e.subject||'').toLowerCase().includes(needle) || (e.snippet||'').toLowerCase().includes(needle));
     }
-    res.json({ success:true, data: emails.slice(-200) });
+    // Group by threadId when available
+    const grouped = {};
+    emails.slice(-400).forEach(e => {
+      const key = e.threadId || e.id;
+      if (!grouped[key]) grouped[key] = { threadId: key, emails: [], lastDate: e.date, tags: new Set(), subject: e.subject };
+      grouped[key].emails.push(e);
+      if (e.date && (!grouped[key].lastDate || new Date(e.date) > new Date(grouped[key].lastDate))) grouped[key].lastDate = e.date;
+      (e.tags||[]).forEach(t=> grouped[key].tags.add(t));
+      if (!grouped[key].subject && e.subject) grouped[key].subject = e.subject;
+    });
+    const threadArray = Object.values(grouped).map(t => ({
+      threadId: t.threadId,
+      subject: t.subject,
+      count: t.emails.length,
+      lastDate: t.lastDate,
+      tags: Array.from(t.tags),
+      preview: t.emails.slice(-1)[0]?.snippet || ''
+    })).sort((a,b)=> new Date(b.lastDate) - new Date(a.lastDate)).slice(0,200);
+    res.json({ success:true, data: emails.slice(-200), threads: threadArray });
+  } catch (e) {
+    res.status(500).json({ success:false, error:e.message });
+  }
+});
+
+// OCR upload route (bridged to AI agent if configured)
+app.post('/api/upload-document', upload.single('document'), async (req,res)=> {
+  try {
+    if (!req.file) return res.status(400).json({ success:false, error:'לא הועלה קובץ' });
+    const fileInfo = { name: req.file.originalname, size: req.file.size, mimetype: req.file.mimetype };
+    const AI_URL = process.env.AI_AGENT_URL || AI_AGENT_URL; // ensure variable
+    let ocrResult = null; let fallback = false;
+    try {
+      const formData = new FormData();
+      formData.append('file', fs.createReadStream(req.file.path), req.file.originalname);
+      const ocrResp = await axios.post(`${AI_AGENT_URL}/ocr-process`, formData, { headers: formData.getHeaders(), timeout: 30000 });
+      ocrResult = ocrResp.data;
+    } catch (err) {
+      fallback = true;
+      ocrResult = { success:false, note:'OCR agent not reachable - fallback basic classification', filename: fileInfo.name };
+    } finally {
+      try { fs.unlinkSync(req.file.path); } catch(_e){}
+    }
+    res.json({ success:true, file: fileInfo, ocr: ocrResult, fallback });
   } catch (e) {
     res.status(500).json({ success:false, error:e.message });
   }

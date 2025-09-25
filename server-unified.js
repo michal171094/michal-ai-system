@@ -57,12 +57,22 @@ if (!appData.tasks.length && !appData.debts.length) {
   saveAppData();
 }
 
-// Gmail init (optional)
+// Gmail init (optional) - ensure non-blocking startup
 let gmailService = null;
-try { gmailService = new GmailService(); console.log('📨 Gmail ready'); } catch (e) { console.warn('Gmail disabled:', e.message); }
+try { 
+  gmailService = new GmailService(); 
+  console.log('📨 Gmail ready'); 
+} catch (e) { 
+  console.warn('📨 Gmail disabled (non-critical):', e.message); 
+}
 
-// Initial ingest into AgentCore
-AgentCore.ingestInitial(appData);
+// Non-blocking AgentCore init to prevent startup crashes
+try {
+  AgentCore.ingestInitial(appData);
+  console.log('🧠 AgentCore initialized');
+} catch (e) {
+  console.warn('🧠 AgentCore init warning:', e.message);
+}
 
 // ---------- Generic CRUD (simplified) ----------
 app.get('/api/tasks', (req,res)=> res.json({ success:true, data: appData.tasks }));
@@ -199,4 +209,40 @@ app.get('/api/smart-overview', (req,res)=> {
 // Health
 app.get('/api/health', (_req,res)=> res.json({ status:'OK', ts: new Date().toISOString() }));
 
-app.listen(PORT, ()=> console.log(`🚀 Unified server running on :${PORT}`));
+// Start server with proper error handling
+const server = app.listen(PORT, '0.0.0.0', (err) => {
+  if (err) {
+    console.error('❌ Failed to start server:', err);
+    process.exit(1);
+  }
+  console.log(`🚀 Unified server running on :${PORT}`);
+  console.log(`📍 Health check: http://localhost:${PORT}/api/health`);
+});
+
+// Graceful shutdown handlers
+process.on('SIGTERM', () => {
+  console.log('🔄 SIGTERM received, shutting down gracefully...');
+  server.close(() => {
+    console.log('✅ Server closed');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('🔄 SIGINT received, shutting down gracefully...');
+  server.close(() => {
+    console.log('✅ Server closed');
+    process.exit(0);
+  });
+});
+
+// Handle uncaught errors without crashing
+process.on('uncaughtException', (err) => {
+  console.error('🚨 Uncaught Exception:', err);
+  // Don't exit in production
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('🚨 Unhandled Rejection at:', promise, 'reason:', reason);
+  // Don't exit in production
+});

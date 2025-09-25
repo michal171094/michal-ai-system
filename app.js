@@ -135,7 +135,21 @@ function loadInitialData() {
 async function loadSmartOverview() {
     console.log('🧠 טוען סקירה חכמה...');
     
-    // Always show demo data for now
+    try {
+        // נסה לטעון נתונים מהשרת
+        const response = await fetch('/api/smart-overview');
+        if (response.ok) {
+            const data = await response.json();
+            updateSmartOverview(data);
+            updateStats(data.stats);
+            console.log('✅ נתונים נטענו מהשרת');
+            return;
+        }
+    } catch (error) {
+        console.warn('⚠️ לא ניתן לטעון מהשרת, מציג נתוני דמו:', error);
+    }
+    
+    // אם לא הצליח, הצג נתוני דמו
     console.log('📊 מציג נתוני דמו...');
     showDemoData();
 }
@@ -265,13 +279,38 @@ function showDemoData() {
 }
 
 // Handle task action clicks
-function handleTaskAction(taskId) {
+async function handleTaskAction(taskId) {
     console.log(`🎯 מבצע פעולה למשימה: ${taskId}`);
-    addMessageToChat('איזה פעולה ברצונך לבצע? אני יכולה לעזור עם הכנת מסמכים, מעקב אחר מועדים או תזכורות.', 'ai');
+    
+    try {
+        // נסה לשלוח בקשה לשרת
+        const response = await fetch(`/api/tasks/${taskId}/action`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('token') || 'mock-token'}`
+            },
+            body: JSON.stringify({ 
+                actionType: 'smart_action',
+                parameters: { taskId }
+            })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            addMessageToChat(data.data.message || 'פעולה בוצעה בהצלחה!', 'ai');
+        } else {
+            throw new Error('Server error');
+        }
+    } catch (error) {
+        // אם השרת לא זמין, השתמש בתגובת גיבוי
+        console.warn('⚠️ שרת לא זמין, משתמש בתגובת גיבוי:', error);
+        addMessageToChat('איזה פעולה ברצונך לבצע? אני יכולה לעזור עם הכנת מסמכים, מעקב אחר מועדים או תזכורות.', 'ai');
+    }
 }
 
 // Chat functionality
-function sendMessage(messageText = null) {
+async function sendMessage(messageText = null) {
     const input = document.getElementById('chatInput');
     const message = messageText || (input ? input.value.trim() : '');
     
@@ -284,10 +323,38 @@ function sendMessage(messageText = null) {
     addMessageToChat(message, 'user');
     
     // Show typing indicator
-    setTimeout(() => {
+    const typingIndicator = document.createElement('div');
+    typingIndicator.className = 'message ai-message typing';
+    typingIndicator.innerHTML = '<div class="message-content">כותבת...</div>';
+    const messagesContainer = document.getElementById('chatMessages');
+    messagesContainer.appendChild(typingIndicator);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    
+    try {
+        // נסה לשלוח לשרת
+        const response = await fetch('/api/chat/message', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('token') || 'mock-token'}`
+            },
+            body: JSON.stringify({ message })
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            typingIndicator.remove();
+            addMessageToChat(data.data.response, 'ai');
+        } else {
+            throw new Error('Server error');
+        }
+    } catch (error) {
+        // אם השרת לא זמין, השתמש בתגובת גיבוי
+        console.warn('⚠️ שרת לא זמין, משתמש בתגובת גיבוי:', error);
+        typingIndicator.remove();
         const response = generateAIResponse(message);
         addMessageToChat(response, 'ai');
-    }, 1000);
+    }
 }
 
 // Add message to chat
@@ -1242,5 +1309,171 @@ async function loadSyncBadges() {
 
 // Expose only required legacy global handlers
 window.handleTaskAction = handleTaskAction;
+
+// ================== AgentCore Frontend (Priorities & Questions) ==================
+async function loadPrioritiesData() {
+    const tbody = document.getElementById('prioritiesTableBody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;">⏳ טוען...</td></tr>';
+    try {
+        const res = await fetch('/api/agent/priorities');
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error||'שגיאה');
+        if (!data.data.length) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;">אין פריטים</td></tr>';
+            return;
+        }
+        tbody.innerHTML = data.data.slice(0,50).map(item => renderPriorityRow(item)).join('');
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#c00;">שגיאה: ${e.message}</td></tr>`;
+    }
+}
+
+function renderPriorityRow(item) {
+    const deadline = item.deadline ? new Date(item.deadline).toLocaleDateString('he-IL') : '-';
+    const amount = item.amount ? `${item.currency||''} ${item.amount}` : '-';
+    const statusClass = mapStatusToClass(item.status || '');
+    const action = item.action ? `<span class="action-chip">${item.action}</span>` : '';
+    return `<tr>
+        <td>${item.title}</td>
+        <td>${deadline}</td>
+        <td>${amount}</td>
+        <td><span class="status-badge ${statusClass}">${item.status || ''}</span></td>
+        <td><span class="score-badge">${item.priorityScore}</span></td>
+        <td>${action}</td>
+    </tr>`;
+}
+
+function mapStatusToClass(status) {
+    if (!status) return 'medium';
+    const s = status.trim();
+    if (['דחוף','התראה','איחור'].includes(s)) return 'critical';
+    if (['גבוה','פתוח','בהתנגדות'].includes(s)) return 'high';
+    if (['בינוני','בהמתנה'].includes(s)) return 'medium';
+    return 'low';
+}
+
+async function updateBalanceFromInput() {
+    const input = document.getElementById('balanceInput');
+    if (!input) return;
+    const val = Number(input.value);
+    if (isNaN(val)) { showNotification('אנא הזיני ערך מספרי ליתרה'); return; }
+    try {
+        const res = await fetch('/api/agent/finance/balance', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ balance: val }) });
+        const data = await res.json();
+        if (data.success) {
+            showNotification('יתרה עודכנה');
+            loadPrioritiesData();
+        } else {
+            showNotification('שגיאה בעדכון יתרה','error');
+        }
+    } catch (e) {
+        showNotification('שגיאה ברשת');
+    }
+}
+
+async function runSyncSimulation() {
+    try {
+        const res = await fetch('/api/agent/sync/simulate', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ sources:['emails','debts','bureaucracy','academic'] }) });
+        const data = await res.json();
+        if (data.success) {
+            showNotification('סימולציית סנכרון בוצעה');
+            loadPrioritiesData();
+        }
+    } catch (e) {
+        showNotification('שגיאה בסימולציה','error');
+    }
+}
+
+async function toggleQuestionsPanel() {
+    const panel = document.getElementById('questionsPanel');
+    if (!panel) return;
+    if (panel.style.display === 'none') {
+        await loadQuestions();
+        panel.style.display = 'block';
+    } else {
+        panel.style.display = 'none';
+    }
+}
+
+async function loadQuestions() {
+    const panel = document.getElementById('questionsPanel');
+    const counter = document.getElementById('questionsCount');
+    if (!panel) return;
+    panel.innerHTML = '<div style="padding:10px;">⏳ טוען שאלות...</div>';
+    try {
+        const res = await fetch('/api/agent/questions');
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error||'שגיאה');
+        const questions = data.data;
+        if (counter) counter.textContent = questions.length;
+        if (!questions.length) { panel.innerHTML = '<div style="padding:10px;">אין שאלות פתוחות ✅</div>'; return; }
+        panel.innerHTML = questions.map(q => renderQuestionItem(q)).join('');
+        panel.querySelectorAll('.answer-btn').forEach(btn => {
+            btn.addEventListener('click', answerQuestionHandler);
+        });
+    } catch (e) {
+        panel.innerHTML = `<div style="color:#c00;padding:10px;">שגיאה: ${e.message}</div>`;
+    }
+}
+
+function renderQuestionItem(q) {
+    return `<div class="question-item" data-qid="${q.id}">
+        <div class="question-text">${q.question}<div class="question-meta">נושא: ${q.topic} • חשיבות: ${q.importance}</div></div>
+        <div class="question-actions">
+            <input class="answer-input" placeholder="תשובה" />
+            <button class="small-btn answer-btn">שליחה</button>
+        </div>
+    </div>`;
+}
+
+async function answerQuestionHandler(e) {
+    const wrapper = e.target.closest('.question-item');
+    const id = wrapper.getAttribute('data-qid');
+    const input = wrapper.querySelector('.answer-input');
+    const answer = input.value.trim();
+    if (!answer) { showNotification('אנא כתבי תשובה'); return; }
+    try {
+        const res = await fetch(`/api/agent/questions/${id}/answer`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ answer }) });
+        const data = await res.json();
+        if (data.success) {
+            wrapper.style.opacity = 0.5;
+            wrapper.querySelector('.answer-input').disabled = true;
+            e.target.disabled = true;
+            showNotification('נשמר');
+            loadQuestions();
+        } else {
+            showNotification('שגיאה בשמירה','error');
+        }
+    } catch (err) {
+        showNotification('שגיאת רשת','error');
+    }
+}
+
+// Extend initializeEventListeners to wire priorities controls if present
+const _origInitEvents = initializeEventListeners;
+initializeEventListeners = function() {
+    _origInitEvents();
+    const refreshPrioritiesBtn = document.getElementById('refreshPrioritiesBtn');
+    const updateBalanceBtn = document.getElementById('updateBalanceBtn');
+    const runSyncSimBtn = document.getElementById('runSyncSimBtn');
+    const loadQuestionsBtn = document.getElementById('loadQuestionsBtn');
+    if (refreshPrioritiesBtn) refreshPrioritiesBtn.addEventListener('click', loadPrioritiesData);
+    if (updateBalanceBtn) updateBalanceBtn.addEventListener('click', updateBalanceFromInput);
+    if (runSyncSimBtn) runSyncSimBtn.addEventListener('click', runSyncSimulation);
+    if (loadQuestionsBtn) loadQuestionsBtn.addEventListener('click', toggleQuestionsPanel);
+};
+
+// Hook into tab switching for priorities
+const _origSwitchTab = switchTab;
+switchTab = function(tabName) {
+    _origSwitchTab(tabName);
+    if (tabName === 'priorities') {
+        loadPrioritiesData();
+    }
+};
+
+// Expose for debugging
+window.__AgentCoreUI = { loadPrioritiesData, loadQuestions };
 
 console.log('✅ מיכל AI - מערכת עוזרת אישית מוכנה לעבודה! 🚀');

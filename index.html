@@ -49,6 +49,7 @@
             <button class="nav-tab" data-tab="academic">📚 אקדמיה</button>
             <button class="nav-tab" data-tab="debts">💰 חובות</button>
             <button class="nav-tab" data-tab="bureaucracy">🏛️ בירוקרטיה</button>
+            <button class="nav-tab" data-tab="priorities">⚖️ תעדוף</button>
             <button class="nav-tab" data-tab="overview">📊 סיכום</button>
         </div>                    <!-- Tab Contents -->
                     <div class="tab-content">
@@ -236,6 +237,39 @@
                                         <!-- Will be populated by JS -->
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+
+                        <!-- Priorities Tab -->
+                        <div id="priorities" class="tab-panel">
+                            <h2>תעדוף חכם (AgentCore)</h2>
+                            <div class="priorities-toolbar">
+                                <button id="refreshPrioritiesBtn" class="action-btn secondary">🔄 רענון תעדוף</button>
+                                <button id="runSyncSimBtn" class="action-btn secondary">🛰️ סימולציית סנכרון</button>
+                                <button id="loadQuestionsBtn" class="action-btn secondary">❓ שאלות פתוחות (<span id="questionsCount">0</span>)</button>
+                                <div class="balance-input-group">
+                                    <label for="balanceInput">יתרה בחשבון:</label>
+                                    <input type="number" id="balanceInput" placeholder="2000" style="width:120px;" />
+                                    <button id="updateBalanceBtn" class="action-btn primary small">עדכון</button>
+                                </div>
+                            </div>
+                            <div id="questionsPanel" class="questions-panel" style="display:none"></div>
+                            <div class="table-container priorities-table-wrapper">
+                                <table class="priorities-table" id="prioritiesTable">
+                                    <thead>
+                                        <tr>
+                                            <th>משימה / פריט</th>
+                                            <th>דדליין</th>
+                                            <th>סכום</th>
+                                            <th>סטטוס</th>
+                                            <th>AI ציון</th>
+                                            <th>פעולה הבאה</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="prioritiesTableBody">
+                                        <tr><td colspan="6" style="text-align:center;padding:20px;">טוען תעדוף...</td></tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>

@@ -108,7 +108,13 @@ function initializeEventListeners() {
     // Smart overview refresh
     const refreshBtn = document.getElementById('refreshSmartBtn');
     if (refreshBtn) {
-        refreshBtn.addEventListener('click', loadSmartOverview);
+        console.log('✅ נמצא כפתור רענון חכם');
+        refreshBtn.addEventListener('click', () => {
+            console.log('🔔 לחיצה על כפתור רענון חכם');
+            loadSmartOverview();
+        });
+    } else {
+        console.error('❌ לא נמצא כפתור רענון חכם');
     }
 }
 
@@ -346,16 +352,20 @@ function setupSyncControls() {
         { id: 'syncDebtsBtn', module: 'debts' },
         { id: 'syncEmailBtn', module: 'emails' }
     ];
-    
+
     syncButtons.forEach(({ id, module }) => {
         const btn = document.getElementById(id);
         if (btn) {
-            btn.addEventListener('click', () => openSyncModal(module));
+            console.log(`✅ נמצא כפתור: ${id}`);
+            btn.addEventListener('click', () => {
+                console.log(`🔔 לחיצה על כפתור: ${id}, מודול: ${module}`);
+                openSyncModal(module);
+            });
+        } else {
+            console.error(`❌ לא נמצא כפתור: ${id}`);
         }
     });
-}
-
-// Setup modal controls
+}// Setup modal controls
 function setupModalControls() {
     console.log('📋 מגדיר בקרת חלונות...');
     

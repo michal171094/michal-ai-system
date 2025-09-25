@@ -612,18 +612,24 @@ app.use((err, req, res, next) => {
     });
 });
 
-// 404 handler
+// Serve main page
+app.get('/', (req, res) => {
+    console.log('📄 Serving index.html for root path');
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.json({ status: 'healthy', timestamp: new Date().toISOString() });
+});
+
+// 404 handler - must be LAST!
 app.use('*', (req, res) => {
     res.status(404).json({
         success: false,
         error: 'הדף לא נמצא',
         path: req.originalUrl
     });
-});
-
-// Serve main page
-app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 // Start server with error handling

@@ -279,7 +279,12 @@ app.post('/api/agent/finance/balance', (req, res) => {
 app.get('/api/agent/priorities', (req, res) => {
     try {
         ensureInitialIngest();
+        const { explain } = req.query;
         const ranked = AgentCore.getPriorities(appData);
+        if (explain === 'minimal') {
+            // strip breakdowns to reduce payload
+            return res.json({ success:true, data: ranked.map(r=> ({ ...r, breakdown: undefined })) });
+        }
         res.json({ success:true, data: ranked });
     } catch (e) {
         res.status(500).json({ success:false, error: e.message });

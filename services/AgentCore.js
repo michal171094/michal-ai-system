@@ -106,46 +106,59 @@ class PriorityEngine {
         this.graph = graph;
     }
     scoreItem(item, context = {}) {
-        // Base score factors
+        // Provide explainable breakdown of each contributing factor
         let score = 0;
+        const breakdown = [];
+        const add = (label, points, meta) => { if (points) { score += points; breakdown.push({ label, points, meta }); } };
         const now = Date.now();
-        // Deadline
+        // Deadline urgency
         if (item.deadline) {
             const diffDays = (new Date(item.deadline) - now) / 86400000;
-            if (diffDays < 0) score += 120; // overdue
-            else if (diffDays <= 0) score += 110;
-            else if (diffDays <= 1) score += 100;
-            else if (diffDays <= 3) score += 85;
-            else if (diffDays <= 7) score += 60;
-            else if (diffDays <= 14) score += 40;
+            let pts = 0; let bucket = '';
+            if (diffDays < 0) { pts = 120; bucket = 'overdue'; }
+            else if (diffDays <= 0) { pts = 110; bucket = 'due today'; }
+            else if (diffDays <= 1) { pts = 100; bucket = '≤1d'; }
+            else if (diffDays <= 3) { pts = 85; bucket = '≤3d'; }
+            else if (diffDays <= 7) { pts = 60; bucket = '≤7d'; }
+            else if (diffDays <= 14) { pts = 40; bucket = '≤14d'; }
+            add('דדליין', pts, { diffDays: Number(diffDays.toFixed(2)), bucket });
         } else {
-            score += 10; // unknown deadline
+            add('אין דדליין', 10);
         }
         // Domain weighting
         const domainWeights = { debt: 40, bureaucracy: 30, academic: 20, email: 15 };
-        score += domainWeights[item.domain] || 10;
+        add('דומיין', domainWeights[item.domain] || 10, { domain: item.domain });
         // Financial impact
         if (item.amount) {
             const amt = Number(item.amount) || 0;
-            if (amt > 5000) score += 50; else if (amt > 1000) score += 35; else if (amt > 300) score += 20; else if (amt > 0) score += 10;
+            let pts = 0; let tier = '';
+            if (amt > 5000) { pts = 50; tier = '>5000'; }
+            else if (amt > 1000) { pts = 35; tier = '>1000'; }
+            else if (amt > 300) { pts = 20; tier = '>300'; }
+            else if (amt > 0) { pts = 10; tier = '>0'; }
+            add('סכום כספי', pts, { amount: amt, tier });
         }
         // Status urgency
         const statusWeights = { 'התראה': 40, 'פתוח': 25, 'בהתנגדות': 30, 'בהמתנה': 10 };
-        score += statusWeights[item.status] || 5;
-        // If relates to client with active edge 'VIP'
-        if (item.client && this.graph.getNode('client_'+item.client)?.props?.tier === 'VIP') score += 25;
-        // If memory indicates low balance & this is debt -> escalate
+        add('סטטוס', statusWeights[item.status] || 5, { status: item.status });
+        // VIP client influence
+        if (item.client && this.graph.getNode('client_'+item.client)?.props?.tier === 'VIP') {
+            add('לקוח VIP', 25, { client: item.client });
+        }
+        // Balance pressure (only for debts)
         const balance = this.memory.facts.get('finance.currentBalance')?.value;
         if (balance !== undefined && item.domain === 'debt') {
-            if (balance < 1000) score += 30;
-            if (balance < (item.amount || 0)) score += 15;
+            if (balance < 1000) add('יתרה נמוכה (<1000)', 30, { balance });
+            if (balance < (item.amount || 0)) add('יתרה נמוכה מהחוב', 15, { balance, amount: item.amount });
         }
-        return Math.round(score);
+        return { score: Math.round(score), breakdown };
     }
     rank(items) {
-        return items.map(i => ({ ...i, priorityScore: this.scoreItem(i) }))
-            .sort((a,b)=> b.priorityScore - a.priorityScore)
-            .slice(0, 100);
+        return items.map(i => {
+            const { score, breakdown } = this.scoreItem(i);
+            return { ...i, priorityScore: score, breakdown };
+        }).sort((a,b)=> b.priorityScore - a.priorityScore)
+          .slice(0, 100);
     }
 }
 

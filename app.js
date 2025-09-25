@@ -1334,12 +1334,17 @@ function renderPriorityRow(item) {
     const amount = item.amount ? `${item.currency||''} ${item.amount}` : '-';
     const statusClass = mapStatusToClass(item.status || '');
     const action = item.action ? `<span class="action-chip">${item.action}</span>` : '';
+    // Build breakdown tooltip if available
+    let breakdownHtml = '';
+    if (item.breakdown && Array.isArray(item.breakdown)) {
+        breakdownHtml = item.breakdown.map(b=> `<div class='bd-row'><span>${b.label}</span><span>${b.points}</span></div>`).join('');
+    }
     return `<tr>
         <td>${item.title}</td>
         <td>${deadline}</td>
         <td>${amount}</td>
         <td><span class="status-badge ${statusClass}">${item.status || ''}</span></td>
-        <td><span class="score-badge">${item.priorityScore}</span></td>
+        <td><span class="score-badge" data-breakdown='${JSON.stringify(item.breakdown||[]).replace(/'/g,"&apos;")}' onclick="showScoreBreakdown(this)">${item.priorityScore}</span></td>
         <td>${action}</td>
     </tr>`;
 }
@@ -1475,5 +1480,23 @@ switchTab = function(tabName) {
 
 // Expose for debugging
 window.__AgentCoreUI = { loadPrioritiesData, loadQuestions };
+
+// Score breakdown popup
+function showScoreBreakdown(el) {
+    try {
+        const data = JSON.parse(el.getAttribute('data-breakdown')||'[]');
+        if (!data.length) return;
+        const html = `
+        <div class="score-explain-wrap">
+            <div class="score-explain-title">פירוט ניקוד</div>
+            <div class="score-explain-rows">${data.map(b=> `<div class='row'><span>${b.label}</span><span>${b.points}</span></div>`).join('')}</div>
+        </div>`;
+        const modal = document.createElement('div');
+        modal.className = 'mini-modal-overlay';
+        modal.innerHTML = `<div class='mini-modal'>${html}<button class='close-mini' onclick='this.closest(".mini-modal-overlay").remove()'>סגור</button></div>`;
+        document.body.appendChild(modal);
+    } catch (e) {}
+}
+window.showScoreBreakdown = showScoreBreakdown;
 
 console.log('✅ מיכל AI - מערכת עוזרת אישית מוכנה לעבודה! 🚀');

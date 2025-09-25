@@ -14,7 +14,7 @@ import uvicorn
 
 # ייבוא הסוכן החכם
 try:
-    from michal_agent import MichalAIAgent
+    from .michal_agent import MichalAIAgent
     print("✅ ייבוא MichalAIAgent הצליח")
 except ImportError as e:
     print(f"⚠️ שגיאה בייבוא: {e}")

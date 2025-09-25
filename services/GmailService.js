@@ -22,6 +22,8 @@ class GmailService {
             'https://www.googleapis.com/auth/userinfo.email'
         ];
 
+        this.accounts = {};       // { email: tokens }
+        this.activeEmail = null;  // currently selected account
         this.authenticated = false;
         this.loadTokensFromDisk();
     }
@@ -43,14 +45,21 @@ class GmailService {
 
     async exchangeCodeForTokens(code) {
         const { tokens } = await this.oAuth2Client.getToken(code);
-        this.setTokens(tokens);
-        return tokens;
+        this.oAuth2Client.setCredentials(tokens);
+        const oauth2 = google.oauth2({ version: 'v2', auth: this.oAuth2Client });
+        const profile = await oauth2.userinfo.get();
+        const email = profile.data?.email;
+        if (!email) {
+            throw new Error('EMAIL_NOT_FOUND');
+        }
+        this.saveAccount(email, tokens);
+        this.setActiveAccount(email);
+        return { email };
     }
 
-    setTokens(tokens) {
-        this.oAuth2Client.setCredentials(tokens);
-        this.saveTokensToDisk(tokens);
-        this.authenticated = true;
+    saveAccount(email, tokens) {
+        this.accounts[email] = tokens;
+        this.persist();
     }
 
     loadTokensFromDisk() {
@@ -58,13 +67,20 @@ class GmailService {
             if (fs.existsSync(this.tokenPath)) {
                 const raw = fs.readFileSync(this.tokenPath, 'utf8');
                 if (!raw) return false;
-
-                const tokens = JSON.parse(raw);
-                if (tokens) {
-                    this.oAuth2Client.setCredentials(tokens);
-                    this.authenticated = true;
-                    return true;
+                const parsed = JSON.parse(raw);
+                if (parsed.accounts) {
+                    this.accounts = parsed.accounts;
+                    this.activeEmail = parsed.activeEmail || Object.keys(this.accounts)[0] || null;
+                } else {
+                    // backward compatibility (single token file)
+                    this.accounts = { default: parsed };
+                    this.activeEmail = 'default';
                 }
+                if (this.activeEmail && this.accounts[this.activeEmail]) {
+                    this.oAuth2Client.setCredentials(this.accounts[this.activeEmail]);
+                    this.authenticated = true;
+                }
+                return true;
             }
             return false;
         } catch (error) {
@@ -73,12 +89,50 @@ class GmailService {
         }
     }
 
-    saveTokensToDisk(tokens) {
-        fs.writeFileSync(this.tokenPath, JSON.stringify(tokens, null, 2), 'utf8');
+    persist() {
+        const payload = { accounts: this.accounts, activeEmail: this.activeEmail };
+        fs.writeFileSync(this.tokenPath, JSON.stringify(payload, null, 2), 'utf8');
     }
 
     hasValidTokens() {
-        return this.authenticated;
+        return this.authenticated && !!this.activeEmail && !!this.accounts[this.activeEmail];
+    }
+
+    setActiveAccount(email) {
+        if (!this.accounts[email]) {
+            throw new Error('ACCOUNT_NOT_FOUND');
+        }
+        this.activeEmail = email;
+        this.oAuth2Client.setCredentials(this.accounts[email]);
+        this.authenticated = true;
+        this.persist();
+        return { email };
+    }
+
+    removeAccount(email) {
+        if (!this.accounts[email]) return false;
+        delete this.accounts[email];
+        if (this.activeEmail === email) {
+            const remaining = Object.keys(this.accounts);
+            this.activeEmail = remaining[0] || null;
+            if (this.activeEmail) {
+                this.oAuth2Client.setCredentials(this.accounts[this.activeEmail]);
+                this.authenticated = true;
+            } else {
+                this.oAuth2Client.setCredentials({});
+                this.authenticated = false;
+            }
+        }
+        this.persist();
+        return true;
+    }
+
+    listAccounts() {
+        return {
+            accounts: Object.keys(this.accounts).map(email => ({ email, active: email === this.activeEmail })),
+            activeEmail: this.activeEmail,
+            configured: Object.keys(this.accounts).length > 0
+        };
     }
 
     async listRecentEmails(maxResults = 10) {

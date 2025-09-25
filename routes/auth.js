@@ -12,15 +12,25 @@ router.post('/login', async (req, res) => {
 
         // במצב mock - תמיד החזר הצלחה
         if (process.env.DB_MOCK === 'true') {
+            const mockToken = require('jsonwebtoken').sign(
+                { userId: 1 },
+                process.env.JWT_SECRET || 'michal_ai_super_secret_key_2025_secure',
+                { expiresIn: '24h' }
+            );
+            
             return res.json({
                 success: true,
                 message: 'התחברת בהצלחה',
-                user: {
-                    id: 1,
-                    name: 'מיכל',
-                    email: 'michal@example.com'
-                },
-                token: 'mock-token-12345'
+                data: {
+                    user: {
+                        id: 1,
+                        email: 'michal@example.com',
+                        fullName: 'מיכל',
+                        role: 'admin'
+                    },
+                    accessToken: mockToken,
+                    refreshToken: 'mock-refresh-token'
+                }
             });
         }
 

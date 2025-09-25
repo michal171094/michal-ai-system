@@ -74,15 +74,72 @@ try {
   console.warn('🧠 AgentCore init warning:', e.message);
 }
 
+function buildSmartOverviewPayload(appData) {
+  const priorities = AgentCore.getPriorities(appData);
+  const stats = {
+    total: priorities.length,
+    critical: 0,
+    urgent: 0,
+    pending: 0,
+    emailTasks: 0
+  };
+  const now = Date.now();
+  priorities.forEach(item => {
+    if (item.domain === 'email') stats.emailTasks += 1;
+    if (item.deadline) {
+      const diffDays = Math.ceil((new Date(item.deadline).getTime() - now)/86400000);
+      if (diffDays <= 0) stats.critical += 1;
+      else if (diffDays <= 3) stats.urgent += 1;
+      else if (diffDays <= 7) stats.pending += 1;
+    } else {
+      stats.pending += 1;
+    }
+  });
+  const domains = {
+    academic: appData.tasks || [],
+    debts: appData.debts || [],
+    bureaucracy: appData.bureaucracy || [],
+    emails: (appData.emails || []).slice(-200)
+  };
+  return { priorities, stats, domains, lastUpdated: new Date().toISOString() };
+}
+
 // ---------- Generic CRUD (simplified) ----------
 app.get('/api/tasks', (req,res)=> res.json({ success:true, data: appData.tasks }));
 app.post('/api/tasks', (req,res)=> { const t = req.body; t.id = Date.now(); appData.tasks.push(t); saveAppData(); AgentCore.memory.addEvent('task_created', {id:t.id}); res.json({success:true, data:t}); });
+app.put('/api/tasks/:id', (req,res)=> {
+  const id = Number(req.params.id);
+  const idx = appData.tasks.findIndex(t=> Number(t.id) === id);
+  if (idx === -1) return res.status(404).json({ success:false, error:'task not found' });
+  appData.tasks[idx] = { ...appData.tasks[idx], ...req.body, id };
+  saveAppData();
+  AgentCore.memory.addEvent('task_updated', { id, changes: req.body });
+  res.json({ success:true, data: appData.tasks[idx] });
+});
 
 app.get('/api/debts', (req,res)=> res.json({ success:true, data: appData.debts }));
 app.post('/api/debts', (req,res)=> { const d = req.body; d.id = Date.now(); appData.debts.push(d); saveAppData(); AgentCore.memory.addEvent('debt_created', {id:d.id}); res.json({success:true, data:d}); });
+app.put('/api/debts/:id', (req,res)=> {
+  const id = Number(req.params.id);
+  const idx = appData.debts.findIndex(d=> Number(d.id) === id);
+  if (idx === -1) return res.status(404).json({ success:false, error:'debt not found' });
+  appData.debts[idx] = { ...appData.debts[idx], ...req.body, id };
+  saveAppData();
+  AgentCore.memory.addEvent('debt_updated', { id, changes: req.body });
+  res.json({ success:true, data: appData.debts[idx] });
+});
 
 app.get('/api/bureaucracy', (req,res)=> res.json({ success:true, data: appData.bureaucracy }));
 app.post('/api/bureaucracy', (req,res)=> { const b = req.body; b.id = Date.now(); appData.bureaucracy.push(b); saveAppData(); AgentCore.memory.addEvent('bureau_created', {id:b.id}); res.json({success:true, data:b}); });
+app.put('/api/bureaucracy/:id', (req,res)=> {
+  const id = Number(req.params.id);
+  const idx = appData.bureaucracy.findIndex(b=> Number(b.id) === id);
+  if (idx === -1) return res.status(404).json({ success:false, error:'bureaucracy item not found' });
+  appData.bureaucracy[idx] = { ...appData.bureaucracy[idx], ...req.body, id };
+  saveAppData();
+  AgentCore.memory.addEvent('bureau_updated', { id, changes: req.body });
+  res.json({ success:true, data: appData.bureaucracy[idx] });
+});
 
 // ---------- AgentCore endpoints ----------
 app.post('/api/agent/finance/balance', (req,res)=> { const { balance } = req.body; if (typeof balance !== 'number') return res.status(400).json({success:false,error:'balance must be number'}); AgentCore.updateFinancialBalance(balance); return res.json({success:true, stored: balance}); });
@@ -97,14 +154,74 @@ app.get('/api/agent/metrics', (req,res)=> { try { res.json({ success:true, data:
 app.get('/api/agent/auto-actions', (req,res)=> { try { const acts = AgentCore.generateAutoActions(appData); res.json({success:true, data:acts}); } catch(e){ res.status(500).json({success:false,error:e.message}); } });
 
 // ---------- Gmail Integration / Ingest ----------
-app.get('/api/gmail/status', (req,res)=> { if (!gmailService) return res.json({configured:false, authenticated:false}); res.json({configured:true, authenticated:gmailService.hasValidTokens()}); });
+app.get('/api/gmail/status', (req,res)=> {
+  if (!gmailService) return res.json({ configured:false, authenticated:false, accounts:[] });
+  const meta = gmailService.listAccounts();
+  res.json({
+    configured: meta.configured,
+    authenticated: gmailService.hasValidTokens(),
+    accounts: meta.accounts,
+    activeEmail: meta.activeEmail
+  });
+});
+// consolidated connectors status (future other services)
+app.get('/api/connectors/status', (req,res)=> {
+  const gmailMeta = gmailService ? gmailService.listAccounts() : { configured:false, accounts:[], activeEmail:null };
+  res.json({
+    success: true,
+    data: {
+      gmail: {
+        configured: gmailMeta.configured,
+        accounts: gmailMeta.accounts,
+        activeEmail: gmailMeta.activeEmail,
+        authenticated: gmailService ? gmailService.hasValidTokens() : false
+      }
+    }
+  });
+});
 app.get('/api/gmail/auth-url', (req,res)=> { if(!gmailService) return res.status(503).json({error:'Gmail service disabled'}); res.json({ url: gmailService.getAuthUrl() }); });
-app.get('/auth/google/callback', async (req,res)=> { if(!gmailService) return res.status(503).send('Gmail off'); const { code } = req.query; if(!code) return res.redirect('/?gmail=missing_code'); try { await gmailService.exchangeCodeForTokens(code); return res.redirect('/?gmail=connected'); } catch(e){ console.error('OAuth error', e.message); return res.redirect('/?gmail=error'); } });
+app.get('/auth/google/callback', async (req,res)=> {
+  if(!gmailService) return res.status(503).send('Gmail off');
+  const { code } = req.query;
+  if(!code) return res.redirect('/?gmail=missing_code');
+  try {
+    const result = await gmailService.exchangeCodeForTokens(code);
+    const emailParam = result?.email ? `&connected=${encodeURIComponent(result.email)}` : '';
+    return res.redirect('/?gmail=connected' + emailParam);
+  } catch(e){
+    console.error('OAuth error', e.message);
+    return res.redirect('/?gmail=error');
+  }
+});
+app.get('/api/gmail/accounts', (req,res)=> {
+  if (!gmailService) return res.status(503).json({ success:false, error:'Gmail service disabled' });
+  res.json({ success:true, data: gmailService.listAccounts() });
+});
+app.post('/api/gmail/accounts/activate', (req,res)=> {
+  if (!gmailService) return res.status(503).json({ success:false, error:'Gmail service disabled' });
+  const { email } = req.body || {};
+  if (!email) return res.status(400).json({ success:false, error:'email required' });
+  try {
+    const meta = gmailService.setActiveAccount(email);
+    res.json({ success:true, data: meta });
+  } catch (e) {
+    res.status(404).json({ success:false, error:e.message });
+  }
+});
+app.delete('/api/gmail/accounts/:email', (req,res)=> {
+  if (!gmailService) return res.status(503).json({ success:false, error:'Gmail service disabled' });
+  const email = decodeURIComponent(req.params.email);
+  const removed = gmailService.removeAccount(email);
+  res.json({ success: removed, data: gmailService.listAccounts() });
+});
 
 // Pull recent emails and ingest into AgentCore/appData
 app.post('/api/gmail/sync', async (req,res)=> {
   if (!gmailService) return res.status(503).json({ success:false, error:'Gmail disabled'});
   try {
+    if (!gmailService.hasValidTokens()) {
+      return res.status(401).json({ success:false, auth_required:true });
+    }
     const emails = await gmailService.listRecentEmails(30);
     let newCount = 0;
     appData.emails = appData.emails || [];
@@ -203,7 +320,26 @@ if (process.env.GMAIL_BACKGROUND_SYNC === '1') {
 
 // ---------- Smart overview (reuse AgentCore priorities preview) ----------
 app.get('/api/smart-overview', (req,res)=> {
-  try { res.json({ success:true, data: AgentCore.getPriorities(appData).slice(0,20) }); } catch(e){ res.status(500).json({success:false,error:e.message}); }
+  try {
+    const payload = buildSmartOverviewPayload(appData);
+    res.json({
+      success: true,
+      data: {
+        stats: payload.stats,
+        priorities: payload.priorities.slice(0,50),
+        topPriorities: payload.priorities.slice(0,20),
+        domains: {
+          academic: payload.domains.academic,
+          debts: payload.domains.debts,
+          bureaucracy: payload.domains.bureaucracy,
+          emails: payload.domains.emails
+        },
+        lastUpdated: payload.lastUpdated
+      }
+    });
+  } catch(e){
+    res.status(500).json({success:false,error:e.message});
+  }
 });
 
 // Health

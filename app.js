@@ -73,6 +73,8 @@ function switchTab(tabName) {
     // Load data for active tab
     if (tabName === 'smart-overview') {
         loadSmartOverview();
+    } else if (tabName === 'connectors') {
+        loadConnectorsDashboard();
     }
 }
 
@@ -116,6 +118,49 @@ function initializeEventListeners() {
     } else {
         console.error('❌ לא נמצא כפתור רענון חכם');
     }
+
+    const uploadDocBtn = document.getElementById('uploadDocBtn');
+    if (uploadDocBtn) {
+        uploadDocBtn.addEventListener('click', () => {
+            const input = document.getElementById('documentUpload');
+            if (input) input.click();
+        });
+    }
+
+    const documentUploadInput = document.getElementById('documentUpload');
+    if (documentUploadInput) {
+        documentUploadInput.addEventListener('change', handleDocumentUpload);
+    }
+
+    const processDocsBtn = document.getElementById('processDocsBtn');
+    if (processDocsBtn) {
+        processDocsBtn.addEventListener('click', () => {
+            showNotification('🤖 בחירת מסמך תפעיל עיבוד OCR');
+            const input = document.getElementById('documentUpload');
+            if (input) input.click();
+        });
+    }
+
+    const gmailConnectBtn = document.getElementById('gmailConnectBtn');
+    if (gmailConnectBtn) {
+        gmailConnectBtn.addEventListener('click', initiateGmailOAuth);
+    }
+
+    const gmailRefreshBtn = document.getElementById('gmailRefreshBtn');
+    if (gmailRefreshBtn) {
+        gmailRefreshBtn.addEventListener('click', () => loadConnectorsDashboard());
+    }
+
+    const gmailAccountsList = document.getElementById('gmailAccountsList');
+    if (gmailAccountsList && !gmailAccountsList.dataset.bound) {
+        gmailAccountsList.addEventListener('click', handleGmailAccountAction);
+        gmailAccountsList.dataset.bound = '1';
+    }
+
+    const gmailQuickSyncBtn = document.getElementById('gmailQuickSyncBtn');
+    if (gmailQuickSyncBtn) {
+        gmailQuickSyncBtn.addEventListener('click', triggerGmailSync);
+    }
 }
 
 // Load initial application data
@@ -124,6 +169,8 @@ function loadInitialData() {
     
     // Load smart overview
     loadSmartOverview();
+    loadConnectorsDashboard({ silent: true });
+    handleGmailOAuthCallback();
     
     // Show welcome message
     setTimeout(() => {
@@ -134,64 +181,191 @@ function loadInitialData() {
 // Load smart overview data
 async function loadSmartOverview() {
     console.log('🧠 טוען סקירה חכמה...');
-    
+
+    const tableBody = document.getElementById('smartTableBody');
+    if (tableBody) {
+        tableBody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;">⏳ טוען נתונים...</td></tr>';
+    }
+
     try {
-        // נסה לטעון נתונים מהשרת
         const response = await fetch('/api/smart-overview');
-        if (response.ok) {
-            const data = await response.json();
-            updateSmartOverview(data);
-            updateStats(data.stats);
-            console.log('✅ נתונים נטענו מהשרת');
-            return;
-        }
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload = await response.json();
+        const overview = payload?.data;
+        if (!overview) throw new Error('missing payload');
+        updateSmartOverview(overview.priorities || []);
+        updateStats(overview.stats || {});
+        updateDomainTables(overview.domains || {});
+        applySmartOverviewTimestamp(overview.lastUpdated);
+        console.log('✅ נתונים נטענו מהשרת');
+        return;
     } catch (error) {
         console.warn('⚠️ לא ניתן לטעון מהשרת, מציג נתוני דמו:', error);
     }
-    
-    // אם לא הצליח, הצג נתוני דמו
+
     console.log('📊 מציג נתוני דמו...');
     showDemoData();
 }
 
+function applySmartOverviewTimestamp(lastUpdated) {
+    if (!lastUpdated) return;
+    const tsEl = document.getElementById('smartOverviewUpdatedAt');
+    if (!tsEl) return;
+    try {
+        tsEl.textContent = new Date(lastUpdated).toLocaleString('he-IL');
+    } catch (e) {
+        tsEl.textContent = lastUpdated;
+    }
+}
+
 // Update smart overview display
-function updateSmartOverview(data) {
+function updateSmartOverview(priorities = []) {
     const tableBody = document.getElementById('smartTableBody');
     if (!tableBody) return;
-    
+
     tableBody.innerHTML = '';
-    
-    if (data.data && data.data.length > 0) {
-        data.data.forEach((item, index) => {
-            const row = createSmartOverviewRow(item, index + 1);
-            tableBody.appendChild(row);
-        });
-    } else {
-        tableBody.innerHTML = '<tr><td colspan="8" style="text-align: center;">אין משימות להצגה</td></tr>';
+
+    if (!priorities.length) {
+        tableBody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:20px;">אין משימות להצגה</td></tr>';
+        return;
     }
+
+    priorities.forEach((item, index) => {
+        const row = createSmartOverviewRow(item, index + 1);
+        tableBody.appendChild(row);
+    });
 }
 
 // Create a row for smart overview table
 function createSmartOverviewRow(item, index) {
     const row = document.createElement('tr');
-    
-    // Priority badge
-    const priorityClass = item.urgencyLevel === 'קריטי' ? 'critical' : 
-                         item.urgencyLevel === 'גבוה מאוד' ? 'urgent' : 
-                         item.urgencyLevel === 'גבוה' ? 'high' : 'normal';
-    
+
+    const timeInfo = calculateTimeRemaining(item.deadline);
+    const urgencyLabel = determineUrgencyLabel(item.priorityScore || 0, timeInfo);
+    const subtitle = buildItemSubtitle(item);
+    const entityLabel = getEntityLabel(item);
+    const priorityScore = item.priorityScore ?? '—';
+    const actionLabel = item.action || 'פתח פרטים';
+
     row.innerHTML = `
-        <td><span class="priority-badge ${priorityClass}">${item.aiPriority}</span></td>
-        <td><strong>${item.title}</strong><br><small>${item.description}</small></td>
-        <td><span class="domain-badge ${item.domain}">${getDomainLabel(item.domain)}</span></td>
-        <td>${item.description}</td>
-        <td>${item.deadline || 'ללא מועד'}</td>
-        <td><span class="time-remaining ${item.daysLeft < 0 ? 'overdue' : item.daysLeft <= 1 ? 'urgent' : 'normal'}">${item.timeRemaining}</span></td>
-        <td><span class="urgency-badge ${priorityClass}">${item.urgencyLevel}</span></td>
-        <td><button class="action-btn primary" onclick="handleTaskAction('${item.id}')">${item.action}</button></td>
+        <td><span class="priority-badge ${getPriorityBadgeClass(item.priorityScore)}">${priorityScore}</span></td>
+        <td><strong>${item.title || '—'}</strong>${subtitle ? `<br><small class="table-subline">${subtitle}</small>` : ''}</td>
+        <td><span class="domain-badge domain-${item.domain || 'general'}">${getDomainLabel(item.domain)}</span></td>
+        <td>${entityLabel}</td>
+        <td>${formatDateDisplay(item.deadline)}</td>
+        <td><span class="time-remaining ${timeInfo.className}">${timeInfo.label}</span></td>
+        <td><span class="urgency-badge ${urgencyLabel}">${urgencyLabel}</span></td>
+        <td><button class="action-btn primary" onclick="handleTaskAction('${item.id}')">${actionLabel}</button></td>
     `;
-    
+
     return row;
+}
+
+function calculateTimeRemaining(deadline) {
+    if (!deadline) {
+        return { label: 'ללא יעד', className: 'time-normal', diffDays: null };
+    }
+    const parsed = new Date(deadline);
+    if (Number.isNaN(parsed.getTime())) {
+        return { label: deadline, className: 'time-normal', diffDays: null };
+    }
+    const now = new Date();
+    const diffMs = parsed.getTime() - now.getTime();
+    const diffDays = Math.round(diffMs / 86400000);
+
+    if (diffMs < 0) {
+        const daysLate = Math.abs(diffDays);
+        const label = daysLate <= 1 ? 'באיחור פחות מיום' : `באיחור ${daysLate} ימים`;
+        return { label, className: 'time-overdue', diffDays };
+    }
+    if (diffDays === 0) {
+        return { label: 'היום', className: 'time-urgent', diffDays };
+    }
+    if (diffDays === 1) {
+        return { label: 'מחר', className: 'time-urgent', diffDays };
+    }
+    if (diffDays <= 3) {
+        return { label: `${diffDays} ימים`, className: 'time-urgent', diffDays };
+    }
+    if (diffDays <= 7) {
+        return { label: `${diffDays} ימים`, className: 'time-soon', diffDays };
+    }
+    return { label: `${diffDays} ימים`, className: 'time-normal', diffDays };
+}
+
+function determineUrgencyLabel(priorityScore = 0, timeInfo = {}) {
+    if (timeInfo.className === 'time-overdue' || (timeInfo.diffDays !== null && timeInfo.diffDays <= 0)) {
+        return 'קריטי';
+    }
+    if (priorityScore >= 90 || (timeInfo.diffDays !== null && timeInfo.diffDays <= 2)) {
+        return 'דחוף';
+    }
+    if (priorityScore >= 75 || (timeInfo.diffDays !== null && timeInfo.diffDays <= 5)) {
+        return 'גבוה';
+    }
+    return 'בינוני';
+}
+
+function getPriorityBadgeClass(score) {
+    if (score >= 90) return 'critical';
+    if (score >= 75) return 'urgent';
+    if (score >= 60) return 'pending';
+    return 'normal';
+}
+
+function formatDateDisplay(dateString) {
+    if (!dateString) return '—';
+    const parsed = new Date(dateString);
+    if (Number.isNaN(parsed.getTime())) return dateString;
+    return parsed.toLocaleDateString('he-IL');
+}
+
+function getEntityLabel(item = {}) {
+    switch (item.domain) {
+        case 'academic':
+            return item.client || '—';
+        case 'debt':
+            if (item.creditor) return item.creditor;
+            if (item.company) return item.company;
+            if (item.title) {
+                const parts = String(item.title).split(' - ');
+                return parts[1] || parts[0];
+            }
+            return '—';
+        case 'bureaucracy':
+            if (item.authority) return item.authority;
+            if (item.title) {
+                const parts = String(item.title).split(' - ');
+                return parts[1] || parts[0];
+            }
+            return '—';
+        case 'email':
+            return item.from || 'תיבת המייל';
+        default:
+            return item.client || item.company || '—';
+    }
+}
+
+function buildItemSubtitle(item = {}) {
+    const parts = [];
+    if (item.status) parts.push(`סטטוס: ${item.status}`);
+    if (item.amount) parts.push(`סכום: ${formatCurrency(item.amount, item.currency)}`);
+    if (item.emailCount) parts.push(`תכתובות: ${item.emailCount}`);
+    if (item.lastEmailAt) parts.push(`אימייל אחרון: ${formatTime(item.lastEmailAt)}`);
+    return parts.join(' • ');
+}
+
+function formatCurrency(amount, currency = '₪') {
+    const numeric = Number(amount);
+    if (!Number.isFinite(numeric)) {
+        return [amount, currency].filter(Boolean).join(' ');
+    }
+    const normalizedCurrency = currency === '₪' ? 'ILS' : currency === '€' ? 'EUR' : currency || 'ILS';
+    try {
+        return new Intl.NumberFormat('he-IL', { style: 'currency', currency: normalizedCurrency }).format(numeric);
+    } catch (e) {
+        return `${numeric.toLocaleString('he-IL')} ${currency || ''}`.trim();
+    }
 }
 
 // Get domain label in Hebrew
@@ -206,76 +380,461 @@ function getDomainLabel(domain) {
 }
 
 // Update statistics display
-function updateStats(stats) {
-    if (!stats) return;
-    
+function updateStats(stats = {}) {
     const criticalEl = document.getElementById('criticalCount');
     const urgentEl = document.getElementById('urgentCount');
     const pendingEl = document.getElementById('pendingCount');
     const emailTasksEl = document.getElementById('emailTasksCount');
-    
-    if (criticalEl) criticalEl.textContent = stats.critical || 0;
-    if (urgentEl) urgentEl.textContent = stats.urgent || 0;
-    if (pendingEl) pendingEl.textContent = stats.pending || 0;
-    if (emailTasksEl) emailTasksEl.textContent = stats.emailTasks || 0;
+
+    if (criticalEl) criticalEl.textContent = stats.critical ?? 0;
+    if (urgentEl) urgentEl.textContent = stats.urgent ?? 0;
+    if (pendingEl) pendingEl.textContent = stats.pending ?? 0;
+    if (emailTasksEl) emailTasksEl.textContent = stats.emailTasks ?? 0;
+}
+
+function updateDomainTables(domains = {}) {
+    renderAcademicTable(domains.academic || []);
+    renderDebtsTable(domains.debts || []);
+    renderBureaucracyTable(domains.bureaucracy || []);
+}
+
+function renderAcademicTable(tasks = []) {
+    const tbody = document.querySelector('#academicTable tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    if (!tasks.length) {
+        tbody.innerHTML = emptyTableRow(6, 'אין משימות אקדמיות כרגע');
+        return;
+    }
+
+    tasks.forEach(task => {
+        const timeInfo = calculateTimeRemaining(task.deadline);
+        const urgency = determineUrgencyLabel(task.priorityScore || 0, timeInfo);
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${task.project || task.title || '—'}</td>
+            <td>${task.client || '—'}</td>
+            <td>${formatDateDisplay(task.deadline)}</td>
+            <td>${task.status || '—'}</td>
+            <td><span class="urgency-badge ${urgency}">${urgency}</span></td>
+            <td>${task.action || '—'}</td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function renderDebtsTable(debts = []) {
+    const tbody = document.querySelector('#debtsTable tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    if (!debts.length) {
+        tbody.innerHTML = emptyTableRow(7, 'אין חובות פעילים כרגע');
+        return;
+    }
+
+    debts.forEach(debt => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${debt.creditor || '—'}</td>
+            <td>${debt.company || '—'}</td>
+            <td>${formatCurrency(debt.amount, debt.currency)}</td>
+            <td>${debt.case_number || '—'}</td>
+            <td>${debt.status || '—'}</td>
+            <td>${formatDateDisplay(debt.deadline)}</td>
+            <td>${debt.action || '—'}</td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function renderBureaucracyTable(items = []) {
+    const tbody = document.querySelector('#bureaucracyTable tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    if (!items.length) {
+        tbody.innerHTML = emptyTableRow(6, 'אין תהליכים בירוקרטיים פעילים כרגע');
+        return;
+    }
+
+    items.forEach(item => {
+        const timeInfo = calculateTimeRemaining(item.deadline);
+        const urgency = determineUrgencyLabel(item.priorityScore || 0, timeInfo);
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${item.task || item.title || '—'}</td>
+            <td>${item.authority || '—'}</td>
+            <td>${formatDateDisplay(item.deadline)}</td>
+            <td>${item.status || '—'}</td>
+            <td><span class="urgency-badge ${urgency}">${urgency}</span></td>
+            <td>${item.action || '—'}</td>
+        `;
+        tbody.appendChild(row);
+    });
+}
+
+function emptyTableRow(colspan, message) {
+    return `<tr><td colspan="${colspan}" style="text-align:center;padding:16px;color:var(--color-text-secondary);">${message}</td></tr>`;
 }
 
 // Show demo data when server is not available
 function showDemoData() {
-    console.log('📊 מציג נתוני דמו...');
-    
     const demoStats = {
         critical: 3,
-        urgent: 5,
-        pending: 12,
+        urgent: 4,
+        pending: 6,
         emailTasks: 2
     };
-    
-    const demoData = {
-        success: true,
-        data: [
-            {
-                id: 1,
-                title: 'כרמית - סמינר פסיכולוגיה',
-                description: 'לקוח: כרמית',
-                domain: 'academic',
-                deadline: '2025-09-24',
-                timeRemaining: 'היום',
-                urgencyLevel: 'קריטי',
-                aiPriority: 95,
-                action: 'שליחת טיוטה',
-                daysLeft: 0
-            },
-            {
-                id: 2,
-                title: 'PAIR Finance - Immobilien Scout',
-                description: 'מספר תיק: 120203581836',
-                domain: 'debt',
-                deadline: '2025-09-27',
-                timeRemaining: '2 ימים',
-                urgencyLevel: 'קריטי',
-                aiPriority: 90,
-                action: 'שליחת התנגדות',
-                daysLeft: 2
-            },
-            {
-                id: 3,
-                title: 'ביטוח בריאות TK',
-                description: 'רשות: TK',
-                domain: 'bureaucracy',
-                deadline: '2025-09-30',
-                timeRemaining: '5 ימים',
-                urgencyLevel: 'גבוה מאוד',
-                aiPriority: 85,
-                action: 'הגשת מסמכים',
-                daysLeft: 5
-            }
-        ],
-        stats: demoStats
-    };
-    
-    updateSmartOverview(demoData);
+
+    const demoAcademic = [
+        { id: 1, project: 'סמינר פסיכולוגיה', client: 'כרמית', deadline: new Date(Date.now() + 86400000).toISOString().slice(0, 10), status: 'בעבודה', action: 'טיוטה ראשונית' }
+    ];
+    const demoDebts = [
+        { id: 1, creditor: 'PAIR Finance', company: 'Immobilien Scout', amount: 69.52, currency: '€', case_number: '120203581836', status: 'פתוח', deadline: new Date(Date.now() + 86400000 * 3).toISOString().slice(0, 10), action: 'הגשת התנגדות' }
+    ];
+    const demoBureau = [
+        { id: 1, task: 'TK ביטוח בריאות', authority: 'Techniker Krankenkasse', deadline: new Date(Date.now() + 86400000 * 5).toISOString().slice(0, 10), status: 'מסמכים חסרים', action: 'העלאת טפסים' }
+    ];
+
+    const demoPriorities = [
+        {
+            id: 'task_demo_1',
+            domain: 'academic',
+            title: 'כרמית - סמינר פסיכולוגיה',
+            status: 'בעבודה',
+            deadline: demoAcademic[0].deadline,
+            priorityScore: 95,
+            action: 'שליחת טיוטה',
+            client: 'כרמית',
+            lastEmailAt: new Date(Date.now() - 3600000).toISOString(),
+            emailCount: 3
+        },
+        {
+            id: 'debt_demo_1',
+            domain: 'debt',
+            title: 'PAIR Finance - Immobilien Scout',
+            status: 'פתוח',
+            deadline: demoDebts[0].deadline,
+            priorityScore: 90,
+            action: 'שליחת התנגדות',
+            amount: demoDebts[0].amount,
+            currency: demoDebts[0].currency,
+            case_number: demoDebts[0].case_number
+        },
+        {
+            id: 'bureau_demo_1',
+            domain: 'bureaucracy',
+            title: 'TK ביטוח בריאות - שליחת מסמכים',
+            status: 'מסמכים חסרים',
+            deadline: demoBureau[0].deadline,
+            priorityScore: 82,
+            action: 'הגשת מסמכים'
+        }
+    ];
+
+    updateSmartOverview(demoPriorities);
     updateStats(demoStats);
+    updateDomainTables({ academic: demoAcademic, debts: demoDebts, bureaucracy: demoBureau, emails: [] });
+}
+
+// Connectors dashboard helpers
+async function loadConnectorsDashboard(options = {}) {
+    const { silent = false } = options;
+    const badge = document.getElementById('gmailStatusBadge');
+    const info = document.getElementById('gmailStatusInfo');
+    const accountsContainer = document.getElementById('gmailAccountsList');
+    if (!badge || !info || !accountsContainer) return;
+
+    if (!silent) {
+        info.textContent = 'בודק סטטוס...';
+    }
+
+    try {
+        const response = await fetch('/api/connectors/status');
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload = await response.json();
+        const gmail = payload?.data?.gmail || { accounts: [], configured: false, authenticated: false };
+        applyGmailStatusToUI(gmail);
+        renderGmailAccounts(gmail.accounts || [], gmail.activeEmail);
+    } catch (error) {
+        console.error('שגיאה בטעינת סטטוס מחברים:', error);
+        applyGmailStatusToUI({ accounts: [], configured: false, authenticated: false });
+        renderGmailAccounts([], null, { error: true });
+    }
+}
+
+function applyGmailStatusToUI(gmail = {}) {
+    const badge = document.getElementById('gmailStatusBadge');
+    const info = document.getElementById('gmailStatusInfo');
+    if (!badge || !info) return;
+
+    badge.classList.remove('online', 'offline', 'partial');
+
+    if ((gmail.accounts || []).length === 0) {
+        badge.classList.add('offline');
+        badge.textContent = 'מנותק';
+        info.textContent = 'אין חשבון מחובר. התחילי בתהליך ההתחברות.';
+        return;
+    }
+
+    if (gmail.authenticated) {
+        badge.classList.add('online');
+        badge.textContent = 'מחובר';
+        const active = gmail.activeEmail || gmail.accounts.find(acc => acc.active)?.email;
+        info.textContent = active ? `חשבון פעיל: ${active}` : 'החיבור פעיל. ניתן לבחור חשבון ברירת מחדל.';
+        return;
+    }
+
+    badge.classList.add('partial');
+    badge.textContent = 'דורש התחברות';
+    info.textContent = 'יש חשבון שמור, אך יש להשלים התחברות OAuth.';
+}
+
+function renderGmailAccounts(accounts = [], activeEmail = null, options = {}) {
+    const container = document.getElementById('gmailAccountsList');
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (options.error) {
+        container.innerHTML = '<div class="empty-state">לא ניתן לטעון את רשימת החשבונות כרגע.</div>';
+        return;
+    }
+
+    if (!accounts.length) {
+        container.innerHTML = '<div class="empty-state">עדיין אין חשבונות מחוברים. לחצי על "התחברות" כדי להתחיל.</div>';
+        return;
+    }
+
+    accounts.forEach(account => {
+        const card = document.createElement('div');
+        const isActive = account.active || account.email === activeEmail;
+        card.className = `account-item${isActive ? ' active' : ''}`;
+        card.innerHTML = `
+            <div class="account-header">
+                <span class="account-email">${account.email}</span>
+                ${isActive ? '<span class="status-chip online">פעיל</span>' : ''}
+            </div>
+            <div class="account-meta">
+                <span>${isActive ? 'חשבון ברירת מחדל' : 'לא פעיל'}</span>
+            </div>
+            <div class="account-actions">
+                ${isActive ? '' : `<button class="action-btn success" data-action="activate" data-email="${account.email}">הפוך לפעיל</button>`}
+                <button class="action-btn warning" data-action="remove" data-email="${account.email}">נתק</button>
+            </div>
+        `;
+        container.appendChild(card);
+    });
+}
+
+async function initiateGmailOAuth() {
+    const button = document.getElementById('gmailConnectBtn');
+    if (button) button.disabled = true;
+    try {
+        const response = await fetch('/api/gmail/auth-url');
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        if (data?.url) {
+            window.location.href = data.url;
+            return;
+        }
+        throw new Error('missing auth url');
+    } catch (error) {
+        console.error('שגיאה בקבלת קישור OAuth:', error);
+        showNotification('לא ניתן לפתוח את מסך ההרשאות של Gmail כעת. נסי שוב מאוחר יותר.');
+        if (button) button.disabled = false;
+    }
+}
+
+function handleGmailOAuthCallback() {
+    const params = new URLSearchParams(window.location.search);
+    const gmailStatus = params.get('gmail');
+    if (!gmailStatus) return;
+
+    if (gmailStatus === 'connected') {
+        const email = params.get('connected');
+        showNotification(email ? `✅ החשבון ${email} חובר בהצלחה!` : '✅ חשבון Gmail חובר בהצלחה!');
+    } else if (gmailStatus === 'error') {
+        showNotification('❌ החיבור ל-Gmail נכשל. נסי שוב.');
+    } else if (gmailStatus === 'missing_code') {
+        showNotification('⚠️ קוד ההרשאה של Gmail חסר. נסי להתחבר מחדש.');
+    }
+
+    params.delete('gmail');
+    params.delete('connected');
+    const cleaned = params.toString();
+    const newUrl = cleaned ? `${window.location.pathname}?${cleaned}` : window.location.pathname;
+    window.history.replaceState({}, document.title, newUrl);
+
+    loadConnectorsDashboard({ silent: true });
+}
+
+async function handleGmailAccountAction(event) {
+    const button = event.target.closest('button[data-action]');
+    if (!button) return;
+    const { action, email } = button.dataset;
+    if (!email || !action) return;
+
+    if (action === 'activate') {
+        button.disabled = true;
+        await activateGmailAccount(email);
+        return;
+    }
+
+    if (action === 'remove') {
+        if (!confirm(`להסיר את החשבון ${email}?`)) {
+            return;
+        }
+        button.disabled = true;
+        await removeGmailAccount(email);
+    }
+}
+
+async function activateGmailAccount(email) {
+    try {
+        const response = await fetch('/api/gmail/accounts/activate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        await response.json();
+        showNotification(`✅ ${email} מוגדר כעת כחשבון ברירת המחדל.`);
+    } catch (error) {
+        console.error('שגיאה בהפעלת חשבון Gmail:', error);
+        showNotification('❌ לא ניתן להגדיר את החשבון כפעיל.');
+    } finally {
+        loadConnectorsDashboard({ silent: true });
+    }
+}
+
+async function removeGmailAccount(email) {
+    try {
+        const response = await fetch(`/api/gmail/accounts/${encodeURIComponent(email)}`, { method: 'DELETE' });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        await response.json();
+        showNotification(`🗑️ החשבון ${email} הוסר מהרשימה.`);
+    } catch (error) {
+        console.error('שגיאה בהסרת חשבון Gmail:', error);
+        showNotification('❌ לא ניתן להסיר את החשבון.');
+    } finally {
+        loadConnectorsDashboard({ silent: true });
+    }
+}
+
+async function triggerGmailSync() {
+    const button = document.getElementById('gmailQuickSyncBtn');
+    if (!button) {
+        return;
+    }
+    if (button.dataset.loading === '1') {
+        return;
+    }
+
+    const originalHtml = button.innerHTML;
+    button.dataset.loading = '1';
+    button.innerHTML = '⏳ מסנכרן...';
+    button.disabled = true;
+
+    try {
+        const response = await fetch('/api/gmail/sync', { method: 'POST' });
+        const contentType = response.headers.get('content-type') || '';
+        const payload = contentType.includes('application/json') ? await response.json() : {};
+
+        if (response.status === 401 || payload?.auth_required) {
+            showNotification('⚠️ נדרש להתחבר ל-Gmail לפני סנכרון.');
+            return;
+        }
+
+        if (!response.ok || !payload?.success) {
+            throw new Error(payload?.error || `HTTP ${response.status}`);
+        }
+
+        const ingested = payload.ingested ?? 0;
+        const linked = payload.linked ?? 0;
+        const total = payload.total ?? '—';
+        const message = ingested
+            ? `📥 נוספו ${ingested} אימיילים (${linked} קושרו). סה"כ בתיבה: ${total}.`
+            : '📭 המיילים מעודכנים, לא נמצאו פריטים חדשים.';
+        showNotification(message);
+        loadSmartOverview();
+        loadConnectorsDashboard({ silent: true });
+    } catch (error) {
+        console.error('שגיאה בסנכרון Gmail:', error);
+        showNotification('❌ סנכרון המיילים נכשל.');
+    } finally {
+        button.dataset.loading = '0';
+        button.innerHTML = originalHtml;
+        button.disabled = false;
+    }
+}
+
+// Document upload handler
+async function handleDocumentUpload(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    showNotification(`⏳ מעלה את ${file.name}...`);
+
+    const formData = new FormData();
+    formData.append('document', file);
+
+    try {
+        const response = await fetch('/api/upload-document', {
+            method: 'POST',
+            body: formData
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const result = await response.json();
+        showNotification(`📄 ${file.name} הועלה בהצלחה.`);
+        announceDocumentProcessingResult(result);
+    } catch (error) {
+        console.error('שגיאה בהעלאת מסמך:', error);
+        showNotification('❌ העלאת המסמך נכשלה.');
+    } finally {
+        event.target.value = '';
+    }
+}
+
+function announceDocumentProcessingResult(result) {
+    if (!result) return;
+    const fileName = result.file?.name || 'המסמך';
+    const ocrSummary = result.ocr?.summary || result.ocr?.text;
+    const note = result.ocr?.note;
+    const fallback = result.fallback;
+
+    let message = `סיימתי לעבד את ${fileName}.`;
+    if (ocrSummary) {
+        message += `\n\n${ocrSummary}`;
+    } else if (note) {
+        message += `\n\n${note}`;
+    }
+    if (fallback) {
+        message += '\n\nהפעלתי מנגנון גיבוי – שווה להריץ שוב כשסוכן ה-OCR זמין.';
+    }
+
+    addMessageToChat(message, 'ai');
+    renderDocumentRecommendationCard(result);
+}
+
+function renderDocumentRecommendationCard(result) {
+    const container = document.getElementById('recommendationsContainer');
+    const panel = document.getElementById('recommendations-panel');
+    if (!container || !panel) return;
+
+    panel.style.display = 'block';
+
+    const card = document.createElement('div');
+    card.className = 'document-recommendation';
+    const summary = result.ocr?.summary || result.ocr?.text || 'המסמך הועלה, ניתן להמשיך לטפל בו.';
+    const fallback = result.fallback ? '<p class="note">⚠️ הופעל מנגנון גיבוי. מומלץ להפעיל OCR מלא בעתיד.</p>' : '';
+    card.innerHTML = `
+        <h4>📄 ${result.file?.name || 'מסמך חדש'}</h4>
+        <p>${summary}</p>
+        ${fallback}
+    `;
+    container.prepend(card);
 }
 
 // Handle task action clicks

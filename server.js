@@ -20,8 +20,35 @@ const authRoutes = require('./routes/auth');
 
 // Import middleware
 const { authenticateToken } = require('./middleware/auth');
-const { errorHandler, notFoundHandler, validateJSON } = require('./middleware/errorHandler');
 const { logger, logRequest } = require('./utils/logger');
+
+// Simple error handlers
+const errorHandler = (err, req, res, next) => {
+    logger.error('Server error:', err);
+    res.status(500).json({
+        success: false,
+        message: 'שגיאה פנימית בשרת'
+    });
+};
+
+const notFoundHandler = (req, res) => {
+    res.status(404).json({
+        success: false,
+        message: 'משאב לא נמצא'
+    });
+};
+
+const validateJSON = (req, res, next) => {
+    if (req.method === 'POST' || req.method === 'PUT') {
+        if (req.get('Content-Type') && !req.get('Content-Type').includes('application/json')) {
+            return res.status(400).json({
+                success: false,
+                message: 'Content-Type חייב להיות application/json'
+            });
+        }
+    }
+    next();
+};
 
 // Initialize Express app
 const app = express();
@@ -188,9 +215,6 @@ io.on('connection', (socket) => {
                 timestamp: new Date().toISOString(),
                 type: 'ai'
             });
-            
-            // Save to chat history
-            await require('./models/Chat').saveMessage(userId, message, aiResponse);
             
         } catch (error) {
             logger.error('Error processing chat message:', error);

@@ -16,7 +16,19 @@ const authenticateToken = async (req, res, next) => {
         }
 
         // אימות הטוקן
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'michal_ai_super_secret_key_2025_secure');
+        
+        // במצב mock - החזר משתמש דמה
+        if (process.env.DB_MOCK === 'true') {
+            req.user = {
+                id: decoded.userId || 1,
+                email: 'michal@example.com',
+                full_name: 'מיכל',
+                role: 'admin',
+                is_active: true
+            };
+            return next();
+        }
         
         // בדיקה שהמשתמש קיים ופעיל
         const userResult = await database.query(

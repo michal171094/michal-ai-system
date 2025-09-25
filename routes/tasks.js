@@ -219,6 +219,29 @@ router.post('/', async (req, res) => {
         const taskId = uuidv4();
         
         // יצירת המשימה
+        // במצב mock - החזר הצלחה
+        if (process.env.DB_MOCK === 'true') {
+            return res.status(201).json({
+                success: true,
+                data: {
+                    id: taskId,
+                    user_id: userId,
+                    client_id,
+                    title,
+                    description,
+                    module,
+                    task_type,
+                    priority,
+                    deadline,
+                    price_quoted,
+                    action_required,
+                    metadata,
+                    created_at: new Date().toISOString()
+                },
+                message: 'המשימה נוצרה בהצלחה (מצב דמו)'
+            });
+        }
+
         const result = await database.query(`
             INSERT INTO tasks (
                 id, user_id, client_id, title, description, module, 
@@ -233,37 +256,41 @@ router.post('/', async (req, res) => {
             action_required, JSON.stringify(metadata)
         ]);
 
-        // ניתוח דחיפות עם AI
-        try {
-            const urgencyScore = await AIService.analyzeUrgency({
-                title,
-                description,
-                deadline,
-                task_type,
-                client_name: req.body.client_name
-            });
+        // ניתוח דחיפות עם AI (רק אם לא במצב mock)
+        if (process.env.DB_MOCK !== 'true') {
+            try {
+                const urgencyScore = await AIService.analyzeUrgency({
+                    title,
+                    description,
+                    deadline,
+                    task_type,
+                    client_name: req.body.client_name
+                });
 
-            if (urgencyScore >= 8) {
-                await database.query(
-                    'UPDATE tasks SET priority = $1 WHERE id = $2',
-                    ['urgent', taskId]
-                );
+                if (urgencyScore >= 8) {
+                    await database.query(
+                        'UPDATE tasks SET priority = $1 WHERE id = $2',
+                        ['urgent', taskId]
+                    );
+                }
+            } catch (aiError) {
+                logger.warn('שגיאה בניתוח דחיפות AI:', aiError);
             }
-        } catch (aiError) {
-            logger.warn('שגיאה בניתוח דחיפות AI:', aiError);
         }
 
-        // רישום הפעולה בלוג
-        await database.query(`
-            INSERT INTO actions_log (user_id, action_type, entity_type, entity_id, action_data)
-            VALUES ($1, $2, $3, $4, $5)
-        `, [
-            userId,
-            'task_created',
-            'task',
-            taskId,
-            JSON.stringify({ title, module, priority })
-        ]);
+        // רישום הפעולה בלוג (רק אם לא במצב mock)
+        if (process.env.DB_MOCK !== 'true') {
+            await database.query(`
+                INSERT INTO actions_log (user_id, action_type, entity_type, entity_id, action_data)
+                VALUES ($1, $2, $3, $4, $5)
+            `, [
+                userId,
+                'task_created',
+                'task',
+                taskId,
+                JSON.stringify({ title, module, priority })
+            ]);
+        }
 
         logger.info(`✅ משימה חדשה נוצרה: ${title} (${taskId})`);
 
@@ -289,17 +316,31 @@ router.put('/:id', async (req, res) => {
         const taskId = req.params.id;
         const updates = req.body;
 
-        // בדיקה שהמשימה שייכת למשתמש
-        const existingTask = await database.query(
-            'SELECT * FROM tasks WHERE id = $1 AND user_id = $2',
-            [taskId, userId]
-        );
+        // במצב mock - בדיקה בסיסית
+        if (process.env.DB_MOCK === 'true') {
+            // בדיקה בסיסית שהמשימה קיימת
+            const mockTasks = require('../scripts/mockData').tasks;
+            const taskExists = mockTasks.some(task => task.id.toString() === taskId);
+            
+            if (!taskExists) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'משימה לא נמצאה'
+                });
+            }
+        } else {
+            // בדיקה שהמשימה שייכת למשתמש
+            const existingTask = await database.query(
+                'SELECT * FROM tasks WHERE id = $1 AND user_id = $2',
+                [taskId, userId]
+            );
 
-        if (existingTask.rows.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'משימה לא נמצאה'
-            });
+            if (existingTask.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'משימה לא נמצאה'
+                });
+            }
         }
 
         // בניית שאילתת עדכון דינמית
@@ -341,19 +382,30 @@ router.put('/:id', async (req, res) => {
             RETURNING *
         `;
         
+        // במצב mock - החזר הצלחה
+        if (process.env.DB_MOCK === 'true') {
+            return res.json({
+                success: true,
+                data: { id: taskId, ...updates },
+                message: 'המשימה עודכנה בהצלחה (מצב דמו)'
+            });
+        }
+
         const result = await database.query(query, [taskId, userId, ...updateValues]);
 
-        // רישום הפעולה
-        await database.query(`
-            INSERT INTO actions_log (user_id, action_type, entity_type, entity_id, action_data)
-            VALUES ($1, $2, $3, $4, $5)
-        `, [
-            userId,
-            'task_updated',
-            'task',
-            taskId,
-            JSON.stringify(updates)
-        ]);
+        // רישום הפעולה (רק אם לא במצב mock)
+        if (process.env.DB_MOCK !== 'true') {
+            await database.query(`
+                INSERT INTO actions_log (user_id, action_type, entity_type, entity_id, action_data)
+                VALUES ($1, $2, $3, $4, $5)
+            `, [
+                userId,
+                'task_updated',
+                'task',
+                taskId,
+                JSON.stringify(updates)
+            ]);
+        }
 
         res.json({
             success: true,
@@ -378,25 +430,60 @@ router.post('/:id/action', async (req, res) => {
         const { actionType, parameters = {} } = req.body;
 
         // קבלת המשימה
-        const taskResult = await database.query(`
-            SELECT t.*, c.name as client_name, c.email as client_email
-            FROM tasks t
-            LEFT JOIN clients c ON t.client_id = c.id
-            WHERE t.id = $1 AND t.user_id = $2
-        `, [taskId, userId]);
+        let task;
+        
+        if (process.env.DB_MOCK === 'true') {
+            // במצב mock - קבל משימה מהנתונים הסטטיים
+            const mockTasks = require('../scripts/mockData').tasks;
+            const mockTask = mockTasks.find(t => t.id.toString() === taskId);
+            
+            if (!mockTask) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'משימה לא נמצאה'
+                });
+            }
+            
+            task = {
+                id: mockTask.id,
+                title: mockTask.project,
+                description: mockTask.client,
+                module: 'academic',
+                task_type: mockTask.type,
+                priority: mockTask.priority,
+                deadline: mockTask.deadline,
+                client_name: mockTask.client,
+                client_email: 'client@example.com'
+            };
+        } else {
+            const taskResult = await database.query(`
+                SELECT t.*, c.name as client_name, c.email as client_email
+                FROM tasks t
+                LEFT JOIN clients c ON t.client_id = c.id
+                WHERE t.id = $1 AND t.user_id = $2
+            `, [taskId, userId]);
 
-        if (taskResult.rows.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: 'משימה לא נמצאה'
-            });
+            if (taskResult.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'משימה לא נמצאה'
+                });
+            }
+
+            task = taskResult.rows[0];
         }
-
-        const task = taskResult.rows[0];
         let actionResult = {};
 
         // ביצוע פעולות חכמות שונות
         switch (actionType) {
+            case 'smart_action':
+                // פעולה חכמה כללית
+                actionResult = { 
+                    message: 'פעולה חכמה בוצעה בהצלחה! אני כאן לעזור עם הכנת מסמכים, מעקב אחר מועדים או תזכורות.',
+                    action_type: 'smart_action'
+                };
+                break;
+
             case 'generate_document':
                 actionResult = await AIService.generateDocument(
                     parameters.documentType,
@@ -414,31 +501,38 @@ router.post('/:id/action', async (req, res) => {
                 break;
 
             case 'schedule_followup':
-                // יצירת משימת מעקב
-                const followupTaskId = uuidv4();
-                await database.query(`
-                    INSERT INTO tasks (
-                        id, user_id, client_id, title, description, module,
-                        task_type, priority, deadline, action_required
-                    )
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-                `, [
-                    followupTaskId,
-                    userId,
-                    task.client_id,
-                    `מעקב: ${task.title}`,
-                    `מעקב אוטומטי למשימה: ${task.title}`,
-                    task.module,
-                    'followup',
-                    'medium',
-                    parameters.followupDate,
-                    'בצע מעקב ובדוק סטטוס'
-                ]);
-                
-                actionResult = { 
-                    message: 'משימת מעקב נוצרה',
-                    followup_task_id: followupTaskId 
-                };
+                // יצירת משימת מעקב (רק אם לא במצב mock)
+                if (process.env.DB_MOCK !== 'true') {
+                    const followupTaskId = uuidv4();
+                    await database.query(`
+                        INSERT INTO tasks (
+                            id, user_id, client_id, title, description, module,
+                            task_type, priority, deadline, action_required
+                        )
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                    `, [
+                        followupTaskId,
+                        userId,
+                        task.client_id,
+                        `מעקב: ${task.title}`,
+                        `מעקב אוטומטי למשימה: ${task.title}`,
+                        task.module,
+                        'followup',
+                        'medium',
+                        parameters.followupDate,
+                        'בצע מעקב ובדוק סטטוס'
+                    ]);
+                    
+                    actionResult = { 
+                        message: 'משימת מעקב נוצרה',
+                        followup_task_id: followupTaskId 
+                    };
+                } else {
+                    actionResult = { 
+                        message: 'משימת מעקב נוצרה (מצב דמו)',
+                        followup_task_id: 'mock-followup-id'
+                    };
+                }
                 break;
 
             default:
@@ -448,32 +542,34 @@ router.post('/:id/action', async (req, res) => {
                 });
         }
 
-        // עדכון המשימה עם הפעולה שבוצעה
-        const currentActions = task.smart_actions || [];
-        currentActions.push({
-            type: actionType,
-            parameters,
-            result: actionResult,
-            executed_at: new Date().toISOString()
-        });
+        // עדכון המשימה עם הפעולה שבוצעה (רק אם לא במצב mock)
+        if (process.env.DB_MOCK !== 'true') {
+            const currentActions = task.smart_actions || [];
+            currentActions.push({
+                type: actionType,
+                parameters,
+                result: actionResult,
+                executed_at: new Date().toISOString()
+            });
 
-        await database.query(
-            'UPDATE tasks SET smart_actions = $1 WHERE id = $2',
-            [JSON.stringify(currentActions), taskId]
-        );
+            await database.query(
+                'UPDATE tasks SET smart_actions = $1 WHERE id = $2',
+                [JSON.stringify(currentActions), taskId]
+            );
 
-        // רישום בלוג הפעולות
-        await database.query(`
-            INSERT INTO actions_log (user_id, action_type, entity_type, entity_id, action_data, success)
-            VALUES ($1, $2, $3, $4, $5, $6)
-        `, [
-            userId,
-            `smart_action_${actionType}`,
-            'task',
-            taskId,
-            JSON.stringify({ parameters, result: actionResult }),
-            true
-        ]);
+            // רישום בלוג הפעולות
+            await database.query(`
+                INSERT INTO actions_log (user_id, action_type, entity_type, entity_id, action_data, success)
+                VALUES ($1, $2, $3, $4, $5, $6)
+            `, [
+                userId,
+                `smart_action_${actionType}`,
+                'task',
+                taskId,
+                JSON.stringify({ parameters, result: actionResult }),
+                true
+            ]);
+        }
 
         logger.info(`🤖 פעולה חכמה בוצעה: ${actionType} על משימה ${taskId}`);
 
@@ -486,19 +582,21 @@ router.post('/:id/action', async (req, res) => {
     } catch (error) {
         logger.error('שגיאה בביצוע פעולה חכמה:', error);
         
-        // רישום כישלון
-        await database.query(`
-            INSERT INTO actions_log (user_id, action_type, entity_type, entity_id, action_data, success, error_message)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
-        `, [
-            req.user.id,
-            `smart_action_${req.body.actionType}`,
-            'task',
-            req.params.id,
-            JSON.stringify(req.body),
-            false,
-            error.message
-        ]);
+        // רישום כישלון (רק אם לא במצב mock)
+        if (process.env.DB_MOCK !== 'true') {
+            await database.query(`
+                INSERT INTO actions_log (user_id, action_type, entity_type, entity_id, action_data, success, error_message)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+            `, [
+                req.user.id,
+                `smart_action_${req.body.actionType}`,
+                'task',
+                req.params.id,
+                JSON.stringify(req.body),
+                false,
+                error.message
+            ]);
+        }
 
         res.status(500).json({
             success: false,
@@ -512,6 +610,14 @@ router.delete('/:id', async (req, res) => {
     try {
         const userId = req.user.id;
         const taskId = req.params.id;
+
+        // במצב mock - החזר הצלחה
+        if (process.env.DB_MOCK === 'true') {
+            return res.json({
+                success: true,
+                message: 'המשימה נמחקה בהצלחה (מצב דמו)'
+            });
+        }
 
         const result = await database.query(
             'DELETE FROM tasks WHERE id = $1 AND user_id = $2 RETURNING title',

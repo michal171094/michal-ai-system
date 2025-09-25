@@ -50,6 +50,7 @@
             <button class="nav-tab" data-tab="debts">💰 חובות</button>
             <button class="nav-tab" data-tab="bureaucracy">🏛️ בירוקרטיה</button>
             <button class="nav-tab" data-tab="priorities">⚖️ תעדוף</button>
+            <button class="nav-tab" data-tab="connectors">🔌 חיבורים</button>
             <button class="nav-tab" data-tab="overview">📊 סיכום</button>
         </div>                    <!-- Tab Contents -->
                     <div class="tab-content">
@@ -58,7 +59,7 @@
                             <div class="page-header">
                                 <h2>🧠 סקירה חכמה - כל המשימות לפי עדיפות AI</h2>
                                 <div class="header-actions">
-                                    <button class="action-btn primary" id="syncEmailBtn">
+                                    <button class="action-btn primary" id="gmailQuickSyncBtn">
                                         📧 סנכרון מיילים
                                     </button>
                                     <button class="action-btn secondary" id="refreshSmartBtn">
@@ -97,6 +98,10 @@
                                         <div class="stat-label">חדש ממייל</div>
                                     </div>
                                 </div>
+                            </div>
+                            <div class="smart-last-updated">
+                                <span>עודכן לאחרונה:</span>
+                                <span id="smartOverviewUpdatedAt">—</span>
                             </div>
 
                             <!-- Sync Controls -->
@@ -281,6 +286,48 @@
                                         <tr><td colspan="7" style="text-align:center;padding:20px;">טוען תעדוף...</td></tr>
                                     </tbody>
                                 </table>
+                            </div>
+                        </div>
+
+                        <!-- Connectors Tab -->
+                        <div id="connectors" class="tab-panel">
+                            <h2>חיבורים ושירותים</h2>
+                            <div class="connectors-grid">
+                                <section class="connector-card">
+                                    <div class="connector-header">
+                                        <div>
+                                            <h3>📧 Gmail</h3>
+                                            <p class="connector-subtitle">סנכרון מיילים ותכתובות</p>
+                                        </div>
+                                        <span id="gmailStatusBadge" class="status-chip offline">מנותק</span>
+                                    </div>
+                                    <div class="connector-body">
+                                        <p class="connector-info" id="gmailStatusInfo">בודק סטטוס...</p>
+                                        <div class="accounts-list" id="gmailAccountsList"></div>
+                                        <div class="connector-actions">
+                                            <button id="gmailConnectBtn" class="action-btn primary">🔗 התחברות</button>
+                                            <button id="gmailRefreshBtn" class="action-btn secondary">🔄 בדיקת סטטוס</button>
+                                        </div>
+                                    </div>
+                                </section>
+                                <section class="connector-card disabled">
+                                    <div class="connector-header">
+                                        <div>
+                                            <h3>📂 Google Drive</h3>
+                                            <p class="connector-subtitle">בקרוב: מסמכים וקבצים</p>
+                                        </div>
+                                        <span class="status-chip offline">בקרוב</span>
+                                    </div>
+                                </section>
+                                <section class="connector-card disabled">
+                                    <div class="connector-header">
+                                        <div>
+                                            <h3>💬 WhatsApp</h3>
+                                            <p class="connector-subtitle">בקרוב: סנכרון שיחות</p>
+                                        </div>
+                                        <span class="status-chip offline">בקרוב</span>
+                                    </div>
+                                </section>
                             </div>
                         </div>
                     </div>

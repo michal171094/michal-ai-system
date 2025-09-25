@@ -39,6 +39,11 @@ class AIService {
         try {
             logger.info(`🤖 מעבד הודעה מ-${userId}: ${message.substring(0, 100)}...`);
             
+            // אם אין מפתח API, החזר תגובת גיבוי
+            if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === 'your_openai_api_key_here') {
+                return this.getFallbackResponse(message);
+            }
+            
             // קבלת היסטוריית שיחות אחרונה
             const chatHistory = await this.getChatHistory(userId, 10);
             
@@ -82,7 +87,7 @@ class AIService {
             logger.error('❌ שגיאה ביצירת תגובת AI:', error);
             
             // תגובת גיבוי במקרה של שגיאה
-            return 'סליחה, נתקלתי בבעיה טכנית. אנא נסי שוב או פנה לתמיכה טכנית. 🛠️';
+            return this.getFallbackResponse(message);
         }
     }
 
@@ -219,6 +224,25 @@ ${text}
             logger.error('שגיאה בחילוץ נתונים:', error);
             return {};
         }
+    }
+
+    // תגובת גיבוי כשאין API
+    getFallbackResponse(message) {
+        const lowerMessage = message.toLowerCase();
+        
+        if (lowerMessage.includes('דחוף') || lowerMessage.includes('היום')) {
+            return "המשימות הדחופות היום:\n• כרמית - סמינר פסיכולוגיה (דדליין היום!)\n• PAIR Finance - התנגדות (נשאר יומיים)\n• ביטוח בריאות TK - הגשת מסמכים\n\nהתחילי עם כרמית - זה הכי דחוף!";
+        }
+        
+        if (lowerMessage.includes('pair') || lowerMessage.includes('התנגדות')) {
+            return "בשביל PAIR Finance:\n1. אל תודי בחוב\n2. בקשי הוכחות מפורטות\n3. שלחי בדואר רשום\n4. שמרי את כל המסמכים\n\nיש לי תבנית מכתב התנגדות - רוצה לראות אותה?";
+        }
+        
+        if (lowerMessage.includes('בירוקרטיה')) {
+            return "מצב הבירוקרטיה:\n• רישום נישואין - צריך לברר סטטוס\n• TK ביטוח בריאות - דחוף!\n• LEA אישור שהייה - בתהליך\n• Jobcenter - מאושר ✓";
+        }
+        
+        return "הבנתי את השאלה שלך. איך אני יכולה לעזור לך בפירוט יותר? אני יכולה לסייע עם:\n• ניהול המשימות הדחופות\n• הכנת מכתבי התנגדות\n• מעקב אחר בירוקרטיה\n• ייעוץ כלכלי";
     }
 
     // פונקציות עזר פרטיות

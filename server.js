@@ -70,7 +70,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Serve static files
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(__dirname));
 
 // Request logging
 app.use(logRequest);
@@ -96,9 +96,66 @@ app.get('/api/health', (req, res) => {
     });
 });
 
+// Smart overview endpoint 
+app.get('/api/smart-overview', (req, res) => {
+    res.json({
+        success: true,
+        data: [
+            {
+                id: 1,
+                title: 'כרמית - סמינר פסיכולוגיה',
+                description: 'לקוח: כרמית',
+                domain: 'academic',
+                deadline: '2025-09-24',
+                timeRemaining: 'היום',
+                urgencyLevel: 'קריטי',
+                aiPriority: 95,
+                action: 'שליחת טיוטה',
+                daysLeft: 0
+            },
+            {
+                id: 2,
+                title: 'PAIR Finance - Immobilien Scout',
+                description: 'מספר תיק: 120203581836',
+                domain: 'debt',
+                deadline: '2025-09-27',
+                timeRemaining: '2 ימים',
+                urgencyLevel: 'קריטי',
+                aiPriority: 90,
+                action: 'שליחת התנגדות',
+                daysLeft: 2
+            }
+        ],
+        stats: {
+            critical: 3,
+            urgent: 5,
+            pending: 12,
+            emailTasks: 2
+        }
+    });
+});
+
+// Sync endpoints
+app.get('/api/sync/:module', (req, res) => {
+    const { module } = req.params;
+    res.json({
+        success: true,
+        pendingUpdates: [
+            {
+                id: 1,
+                type: 'new_task',
+                title: `עדכון חדש ב${module}`,
+                description: 'עדכון דמו',
+                timestamp: new Date().toISOString(),
+                priority: 'high'
+            }
+        ]
+    });
+});
+
 // Serve the main HTML file for all other routes (SPA support)
 app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
 // 404 handler for API routes that weren't found

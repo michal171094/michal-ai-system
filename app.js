@@ -1339,14 +1339,25 @@ function renderPriorityRow(item) {
     if (item.breakdown && Array.isArray(item.breakdown)) {
         breakdownHtml = item.breakdown.map(b=> `<div class='bd-row'><span>${b.label}</span><span>${b.points}</span></div>`).join('');
     }
+    const correspond = buildCorrespondenceBadge(item);
     return `<tr>
         <td>${item.title}</td>
         <td>${deadline}</td>
         <td>${amount}</td>
         <td><span class="status-badge ${statusClass}">${item.status || ''}</span></td>
+        <td>${correspond}</td>
         <td><span class="score-badge" data-breakdown='${JSON.stringify(item.breakdown||[]).replace(/'/g,"&apos;")}' onclick="showScoreBreakdown(this)">${item.priorityScore}</span></td>
         <td>${action}</td>
     </tr>`;
+}
+
+function buildCorrespondenceBadge(item) {
+    if (item.domain === 'email') return '<span class="correspond-badge">מייל</span>';
+    const count = item.emailCount || 0;
+    if (!count) return '<span class="correspond-badge">—</span>';
+    const cls = count ? 'correspond-badge has-mails' : 'correspond-badge';
+    const label = count >= 5 ? `✉️ ${count}` : `✉ ${count}`;
+    return `<span class="${cls}" onclick="openEmailThread('${item.id}')" title="תכתובת: ${count}">${label}</span>`;
 }
 
 function mapStatusToClass(status) {
@@ -1500,6 +1511,7 @@ function showScoreBreakdown(el) {
     } catch (e) {}
 }
 window.showScoreBreakdown = showScoreBreakdown;
+window.openEmailThread = openEmailThread;
 
 async function syncGmailAndRefresh() {
     try {
@@ -1530,6 +1542,36 @@ async function syncGmailAndRefresh() {
         }
     } catch (e) {
         showNotification('שגיאת רשת Gmail','error');
+    }
+}
+
+async function openEmailThread(entityId) {
+    try {
+        const panel = document.getElementById('emailThreadPanel');
+        const body = document.getElementById('emailThreadBody');
+        if (!panel || !body) return;
+        body.innerHTML = '⏳ טוען...';
+        panel.style.display = 'block';
+        // Fetch state snapshot to get last priorities and graph context (lightweight)
+        const stateRes = await fetch('/api/agent/state');
+        const stateData = await stateRes.json();
+        if (!stateData.success) throw new Error('שגיאת מצב');
+        // We stored emails separately; fetch raw emails list by syncing 0 new (or reuse existing if we had endpoint). For now reuse /api/gmail/sync?dry=1? -> simpler: call status + show subset from local after last sync (not available). We'll fetch priorities again to avoid new endpoint.
+        // Fallback: call /api/gmail/status to ensure service up
+        await fetch('/api/gmail/status');
+        // Without a dedicated emails endpoint we rely on last ingested emails present in priorities? Not included. Minimal improvement: show message.
+        // Enhancement: we add a simple call to /api/agent/state then show last events referencing this entity.
+        const events = (stateData.data?.memory?.events||[]).filter(e => e.type === 'email_linked' && e.payload?.entity === entityId).slice(-20).reverse();
+        if (!events.length) { body.innerHTML = 'אין תכתובת מקושרת'; return; }
+        body.innerHTML = events.map(ev => {
+            const dt = new Date(ev.timestamp).toLocaleString('he-IL');
+            return `<div class="email-msg"><div class="em-subject">מייל מקושר (ציון התאמה ${ev.payload.score})</div><div class="em-meta">${dt}</div><div class="em-snippet">Email ID: ${ev.payload.emailId}</div></div>`;
+        }).join('');
+        const closeBtn = document.getElementById('closeEmailThreadBtn');
+        if (closeBtn && !closeBtn._bound) { closeBtn.addEventListener('click', ()=> panel.style.display='none'); closeBtn._bound = true; }
+    } catch (e) {
+        const body = document.getElementById('emailThreadBody');
+        if (body) body.innerHTML = 'שגיאה בטעינת תכתובת';
     }
 }
 

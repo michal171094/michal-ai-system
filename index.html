@@ -247,6 +247,7 @@
                                 <button id="refreshPrioritiesBtn" class="action-btn secondary">🔄 רענון תעדוף</button>
                                 <button id="runSyncSimBtn" class="action-btn secondary">🛰️ סימולציית סנכרון</button>
                                 <button id="loadQuestionsBtn" class="action-btn secondary">❓ שאלות פתוחות (<span id="questionsCount">0</span>)</button>
+                                <button id="gmailSyncBtn" class="action-btn secondary">📨 סנכרון מיילים</button>
                                 <div class="balance-input-group">
                                     <label for="balanceInput">יתרה בחשבון:</label>
                                     <input type="number" id="balanceInput" placeholder="2000" style="width:120px;" />
@@ -254,6 +255,13 @@
                                 </div>
                             </div>
                             <div id="questionsPanel" class="questions-panel" style="display:none"></div>
+                            <div id="emailThreadPanel" class="email-thread-panel" style="display:none">
+                                <div class="etp-header">
+                                    <span class="etp-title">תכתובת מיילים</span>
+                                    <button class="close-etp" id="closeEmailThreadBtn">✖</button>
+                                </div>
+                                <div class="etp-body" id="emailThreadBody">(בחרי פריט עם מיילים)</div>
+                            </div>
                             <div class="table-container priorities-table-wrapper">
                                 <table class="priorities-table" id="prioritiesTable">
                                     <thead>
@@ -262,12 +270,13 @@
                                             <th>דדליין</th>
                                             <th>סכום</th>
                                             <th>סטטוס</th>
+                                            <th>תכתובת</th>
                                             <th>AI ציון</th>
                                             <th>פעולה הבאה</th>
                                         </tr>
                                     </thead>
                                     <tbody id="prioritiesTableBody">
-                                        <tr><td colspan="6" style="text-align:center;padding:20px;">טוען תעדוף...</td></tr>
+                                        <tr><td colspan="7" style="text-align:center;padding:20px;">טוען תעדוף...</td></tr>
                                     </tbody>
                                 </table>
                             </div>

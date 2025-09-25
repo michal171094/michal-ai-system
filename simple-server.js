@@ -3,11 +3,9 @@ const path = require('path');
 const cors = require('cors');
 const axios = require('axios');
 require('dotenv').config();
-// Comment out Supabase import for now
-// const { getTasks, getDebts, getBureaucracy } = require('./config/supabase');
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 const AI_AGENT_URL = process.env.AI_AGENT_URL || 'http://localhost:8000';
 
 // Enable CORS
@@ -19,7 +17,7 @@ app.use(express.json());
 // Serve static files (your HTML, CSS, JS)
 app.use(express.static('.'));
 
-// Mock data from your app.js - Full Data
+// Mock data - Full Data Set
 const appData = {
     tasks: [
         {id: 1, project: "כרמית - סמינר פסיכולוגיה", client: "כרמית", deadline: "2025-09-24", status: "בעבודה", priority: "דחוף", value: 3500, currency: "₪", action: "שליחת טיוטה", module: "academic"},
@@ -41,222 +39,109 @@ const appData = {
     ]
 };
 
-// Helper functions for Smart Overview
+// Helper function for Smart Overview
 function processUnifiedTasks(tasks, debts, bureaucracy) {
     const unified = [];
     
     // Process academic tasks
     tasks.forEach(task => {
         unified.push({
-            type: 'academic',
-            original_id: task.id,
+            id: `task-${task.id}`,
             title: task.project,
+            description: `לקוח: ${task.client}`,
             deadline: task.deadline,
             status: task.status,
             priority: task.priority,
-            next_action: task.action,
-            value_display: `${task.value.toLocaleString()} ${task.currency}`,
-            value_eur: convertToEur(task.value, task.currency),
-            priority_score: calculatePriorityScore(task.deadline, task.priority, 'academic'),
-            priority_level: getPriorityLevel(task.deadline, task.priority)
+            action: task.action,
+            domain: 'academic',
+            value: task.value,
+            currency: task.currency
         });
     });
     
     // Process debts
     debts.forEach(debt => {
         unified.push({
-            type: 'debt',
-            original_id: debt.id,
-            title: `${debt.creditor} - ${debt.company}`,
+            id: `debt-${debt.id}`,
+            title: `${debt.company} - ${debt.creditor}`,
+            description: `מספר תיק: ${debt.case_number}`,
             deadline: debt.deadline,
             status: debt.status,
             priority: debt.priority,
-            next_action: debt.action,
-            value_display: `${debt.amount.toLocaleString()} ${debt.currency}`,
-            value_eur: convertToEur(debt.amount, debt.currency),
-            priority_score: calculatePriorityScore(debt.deadline, debt.priority, 'debt'),
-            priority_level: getPriorityLevel(debt.deadline, debt.priority)
+            action: debt.action,
+            domain: 'debt',
+            value: debt.amount,
+            currency: debt.currency
         });
     });
     
     // Process bureaucracy
-    bureaucracy.forEach(bureau => {
+    bureaucracy.forEach(item => {
         unified.push({
-            type: 'bureaucracy',
-            original_id: bureau.id,
-            title: `${bureau.task} - ${bureau.authority}`,
-            deadline: bureau.deadline,
-            status: bureau.status,
-            priority: bureau.priority,
-            next_action: bureau.action,
-            value_display: 'רשמי',
-            value_eur: 0,
-            priority_score: calculatePriorityScore(bureau.deadline, bureau.priority, 'bureaucracy'),
-            priority_level: getPriorityLevel(bureau.deadline, bureau.priority)
+            id: `bureau-${item.id}`,
+            title: item.task,
+            description: `רשות: ${item.authority}`,
+            deadline: item.deadline,
+            status: item.status,
+            priority: item.priority,
+            action: item.action,
+            domain: 'bureaucracy',
+            value: null,
+            currency: null
         });
     });
     
-    // Sort by priority score (highest first)
-    return unified.sort((a, b) => b.priority_score - a.priority_score);
+    return unified;
 }
 
-function calculatePriorityScore(deadline, priority, type) {
-    const now = new Date();
-    const deadlineDate = new Date(deadline);
-    const daysUntilDeadline = Math.ceil((deadlineDate - now) / (1000 * 60 * 60 * 24));
-    
-    // Base score by priority
-    let score = 0;
-    switch (priority) {
-        case 'דחוף': score = 100; break;
-        case 'גבוה': score = 80; break;
-        case 'בינוני': score = 60; break;
-        case 'נמוך': score = 40; break;
-        default: score = 50;
-    }
-    
-    // Adjust by deadline urgency
-    if (daysUntilDeadline <= 0) score += 50; // Overdue
-    else if (daysUntilDeadline <= 2) score += 30; // Very soon
-    else if (daysUntilDeadline <= 7) score += 10; // This week
-    
-    // Adjust by type importance
-    switch (type) {
-        case 'debt': score += 10; break; // Debts are important
-        case 'bureaucracy': score += 5; break; // Official matters
-        case 'academic': score += 0; break; // Standard
-    }
-    
-    return Math.min(score, 150); // Cap at 150
-}
-
-function getPriorityLevel(deadline, priority) {
-    const now = new Date();
-    const deadlineDate = new Date(deadline);
-    const daysUntilDeadline = Math.ceil((deadlineDate - now) / (1000 * 60 * 60 * 24));
-    
-    if (daysUntilDeadline <= 0 || priority === 'דחוף') return 'critical';
-    if (daysUntilDeadline <= 3 || priority === 'גבוה') return 'urgent';
-    if (daysUntilDeadline <= 7 || priority === 'בינוני') return 'pending';
-    return 'normal';
-}
-
-function convertToEur(amount, currency) {
-    const rates = { '₪': 0.25, '€': 1, '$': 0.85 };
-    return amount * (rates[currency] || 1);
-}
-
-function calculateSmartStatistics(unifiedTasks) {
-    const total_tasks = unifiedTasks.length;
-    const critical_count = unifiedTasks.filter(t => t.priority_level === 'critical').length;
-    const urgent_count = unifiedTasks.filter(t => t.priority_level === 'urgent').length;
-    const pending_count = unifiedTasks.filter(t => t.priority_level === 'pending').length;
-    
-    const total_value = unifiedTasks.reduce((sum, task) => {
-        return sum + (task.value_eur * 3.8); // Convert EUR to ILS for display
-    }, 0);
-    
-    const average_priority_score = unifiedTasks.length > 0 
-        ? unifiedTasks.reduce((sum, task) => sum + task.priority_score, 0) / unifiedTasks.length 
-        : 0;
-    
-    return {
-        total_tasks,
-        critical_count,
-        urgent_count,
-        pending_count,
-        total_value: Math.round(total_value),
-        average_priority_score
-    };
-}
-
-// Smart Overview API endpoint
-app.get('/api/smart-overview', async (req, res) => {
-    try {
-        // Use the existing appData for now (later we'll fetch from database)
-        const tasks = appData.tasks || [];
-        const debts = appData.debts || [];
-        const bureaucracy = appData.bureaucracy || [];
-
-        // Process and unify the data with AI prioritization
-        const unifiedTasks = processUnifiedTasks(tasks, debts, bureaucracy);
-        
-        // Calculate statistics
-        const statistics = calculateSmartStatistics(unifiedTasks);
-        
-        res.json({
-            unified_tasks: unifiedTasks,
-            statistics: statistics,
-            last_updated: new Date().toISOString()
-        });
-        
-    } catch (error) {
-        console.error('Smart overview error:', error);
-        res.status(500).json({ error: 'Failed to fetch smart overview' });
-    }
-});
-
-// API Routes - עכשיו עם Supabase
+// API Routes
 app.get('/api/tasks', async (req, res) => {
     try {
-        // Return appData tasks for now
         res.json({ success: true, data: appData.tasks });
     } catch (error) {
-        console.error('שגיאה בשרת:', error);
+        console.error('שגיאה בטעינת משימות:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
 app.get('/api/debts', async (req, res) => {
     try {
-        // Return appData debts for now
         res.json({ success: true, data: appData.debts });
     } catch (error) {
-        console.error('שגיאה בשרת:', error);
+        console.error('שגיאה בטעינת חובות:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
 app.get('/api/bureaucracy', async (req, res) => {
     try {
-        // Return appData bureaucracy for now
         res.json({ success: true, data: appData.bureaucracy });
     } catch (error) {
-        console.error('שגיאה בשרת:', error);
+        console.error('שגיאה בטעינת בירוקרטיה:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
-app.get('/api/debts', async (req, res) => {
+// Smart Overview API
+app.get('/api/smart-overview', async (req, res) => {
     try {
-        const { data, error } = await getDebts();
-        if (error) {
-            console.error('שגיאה בטעינת חובות:', error);
-            return res.status(500).json({ success: false, error: error.message });
-        }
-        res.json({ success: true, data });
-    } catch (error) {
-        console.error('שגיאה בשרת:', error);
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-app.get('/api/bureaucracy', async (req, res) => {
-    try {
-        const { data, error } = await getBureaucracy();
-        if (error) {
-            console.error('שגיאה בטעינת בירוקרטיה:', error);
-            return res.status(500).json({ success: false, error: error.message });
-        }
-        res.json({ success: true, data });
-    } catch (error) {
-        console.error('שגיאה בשרת:', error);
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-// Smart Chat with AI Agent - הודעות לסוכן החכם
-app.post('/api/smart-chat', async (req, res) => {
+        console.log('🔍 מעבד סקירה חכמה...');
+        
+        const unifiedTasks = processUnifiedTasks(appData.tasks, appData.debts, appData.bureaucracy);
+        
+        // חישוב עדיפות AI חכמה
+        const smartPrioritized = unifiedTasks.map(item => {
+            let aiPriority = 0;
+            let urgencyLevel = 'נמוך';
+            
+            // חישוב זמן שנותר
+            if (item.deadline) {
+                const today = new Date();
+                const deadlineDate = new Date(item.deadline);
+                const daysLeft = Math.ceil((deadlineDate - today) / (1000 * 60 * 60 * 24));
+                
+                if (daysLeft < 0) {
+                    aiPriority += 100; // איחור
                     urgencyLevel = 'קריטי';
                 } else if (daysLeft === 0) {
                     aiPriority += 90; // היום
@@ -274,7 +159,7 @@ app.post('/api/smart-chat', async (req, res) => {
                     aiPriority += 30; // שבועיים
                     urgencyLevel = 'בינוני';
                 }
-
+                
                 item.daysLeft = daysLeft;
                 item.timeRemaining = daysLeft < 0 ? 'איחור' :
                                    daysLeft === 0 ? 'היום' :
@@ -284,7 +169,7 @@ app.post('/api/smart-chat', async (req, res) => {
                 item.daysLeft = 999;
                 item.timeRemaining = 'ללא דדליין';
             }
-
+            
             // חישוב על בסיס עדיפות קיימת
             const priorityMap = {
                 'דחוף': 40,
@@ -293,7 +178,7 @@ app.post('/api/smart-chat', async (req, res) => {
                 'נמוך': 10
             };
             aiPriority += priorityMap[item.priority] || 10;
-
+            
             // חישוב על בסיס תחום
             const domainBonus = {
                 'debt': 25, // חובות חשובים יותר
@@ -301,7 +186,7 @@ app.post('/api/smart-chat', async (req, res) => {
                 'academic': 15 // אקדמיה פחות דחופה
             };
             aiPriority += domainBonus[item.domain] || 0;
-
+            
             // חישוב על בסיס סטטוס
             const statusBonus = {
                 'פתוח': 15,
@@ -311,16 +196,16 @@ app.post('/api/smart-chat', async (req, res) => {
                 'בהמתנה': 10
             };
             aiPriority += statusBonus[item.status] || 5;
-
+            
             item.aiPriority = Math.min(aiPriority, 200); // מקסימום 200
             item.urgencyLevel = urgencyLevel;
-
+            
             return item;
         });
-
+        
         // מיון לפי עדיפות AI
         smartPrioritized.sort((a, b) => b.aiPriority - a.aiPriority);
-
+        
         // חישוב סטטיסטיקות
         const stats = {
             critical: smartPrioritized.filter(item => item.urgencyLevel === 'קריטי').length,
@@ -328,20 +213,21 @@ app.post('/api/smart-chat', async (req, res) => {
             pending: smartPrioritized.filter(item => item.status !== 'סגור' && item.status !== 'הושלם').length,
             emailTasks: 0 // נוסיף בהמשך
         };
-
+        
         res.json({ 
             success: true, 
             data: smartPrioritized.slice(0, 20), // רק 20 הראשונים
             stats,
             totalItems: smartPrioritized.length
         });
-
+        
     } catch (error) {
         console.error('שגיאה בסקירה חכמה:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
+// Authentication routes (mock)
 app.post('/api/auth/login', (req, res) => {
     res.json({ 
         success: true, 
@@ -357,6 +243,7 @@ app.get('/api/auth/me', (req, res) => {
     });
 });
 
+// Health check
 app.get('/api/health', (req, res) => {
     res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
@@ -414,10 +301,6 @@ app.post('/api/chat', (req, res) => {
     });
 });
 
-app.get('/api/health', (req, res) => {
-    res.json({ status: 'OK', timestamp: new Date().toISOString() });
-});
-
 // Serve main page
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
@@ -425,8 +308,9 @@ app.get('/', (req, res) => {
 
 // Start server
 app.listen(PORT, () => {
-    console.log('🚀 מערכת עוזר AI אישית רצה על פורט 3000');
-    console.log('📊 Dashboard זמין בכתובת: http://localhost:3000');
+    console.log(`🚀 מערכת עוזר AI אישית רצה על פורט ${PORT}`);
+    console.log(`📊 Dashboard זמין בכתובת: http://localhost:${PORT}`);
+    console.log('🔗 AI Agent URL:', AI_AGENT_URL);
 });
 
 console.log('שרת פשוט מוכן לעבודה!');

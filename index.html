@@ -1,12 +1,91 @@
-<!DOCT  <link rel="stylesheet" href="style.css?v=20250926-4">
-  <link rel="stylesheet" href="modal-styles.css?v=20250926-4">E html>
+<!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>עוזרת AI אישית - מיכל</title>
-    <link rel="stylesheet" href="style.css?v=20250926-3">
-    <link rel="stylesheet" href="modal-styles.css?v=20250926-3">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>עוזרת AI אישית - מיכל</title>
+  <style>
+    /* Critical inline CSS */
+    :root {
+      --primary-purple: #96758d;
+      --secondary-teal: #75968c;
+      --background-main: #e6d3d9;
+      --background-cards: #f9f6f7;
+      --text-regular: #333333;
+      --text-secondary: #96758d;
+    }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      margin: 0; 
+      background: var(--background-main);
+      color: var(--text-regular);
+      direction: rtl;
+    }
+    .app-container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+    .app-header { background: var(--background-cards); padding: 20px; border-radius: 12px; margin-bottom: 20px; }
+    .nav-tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+    .nav-tab { 
+      padding: 12px 20px; 
+      border: none; 
+      border-radius: 8px; 
+      background: var(--background-cards);
+      color: var(--text-regular);
+      cursor: pointer;
+    }
+    .nav-tab.active { background: var(--primary-purple); color: white; }
+    .app-main { display: grid; grid-template-columns: 1fr 350px; gap: 20px; }
+    .tab-panel { display: none; background: var(--background-cards); padding: 20px; border-radius: 12px; }
+    .tab-panel.active { display: block; }
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 20px; }
+    .stat-card { 
+      background: white; 
+      padding: 15px; 
+      border-radius: 8px; 
+      text-align: center;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .stat-number { font-size: 24px; font-weight: bold; margin-bottom: 5px; }
+    .connector-card { 
+      background: white; 
+      padding: 20px; 
+      border-radius: 12px; 
+      margin-bottom: 15px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    .connector-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+    .status-chip { 
+      padding: 4px 12px; 
+      border-radius: 12px; 
+      font-size: 12px;
+      font-weight: bold;
+    }
+    .status-chip.offline { background: #fee; color: #c44; }
+    .status-chip.online { background: #efe; color: #4a4; }
+    .action-btn { 
+      padding: 8px 16px; 
+      border: none; 
+      border-radius: 6px; 
+      cursor: pointer;
+      margin-right: 8px;
+    }
+    .action-btn.primary { background: var(--primary-purple); color: white; }
+    .action-btn.secondary { background: var(--secondary-teal); color: white; }
+    .chat-section { 
+      background: var(--background-cards); 
+      border-radius: 12px; 
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      height: fit-content;
+    }
+    .table-container { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+    th, td { padding: 8px; text-align: right; border-bottom: 1px solid #ddd; }
+    th { background: var(--background-main); font-weight: bold; }
+    .empty-state { text-align: center; padding: 40px; color: var(--text-secondary); }
+  </style>
+  <link rel="stylesheet" href="style.css?v=20250926-5">
+  <link rel="stylesheet" href="modal-styles.css?v=20250926-5">
 </head>
 <body>
     <div class="app-container">

@@ -528,8 +528,9 @@ function showEmptyState() {
                 <h3 style="margin-bottom:10px;">👋 ברוכה הבאה!</h3>
                 <p style="margin-bottom:15px;">עדיין אין נתונים במערכת.</p>
                 <div style="font-size:14px;">
-                    <p><strong>לבדיקת חיבור Gmail:</strong> לכי לטאב "🔌 חיבורים" ולחצי "התחברות"</p>
-                    <p><strong>להוספת משימות:</strong> השתמשי בטפסי ההוספה בטאבים השונים</p>
+                    <p><strong>לחיבור Gmail:</strong> לכי לטאב "🔌 חיבורים" ולחצי "התחברות"</p>
+                    <p><strong>המייל שלך:</strong> michal.havatzelet@gmail.com</p>
+                    <p><strong>להוספת משימות:</strong> השתמשי בטאבים השונים להוספה ידנית</p>
                 </div>
             </div>
         </td></tr>`;

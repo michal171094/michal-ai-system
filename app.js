@@ -604,16 +604,6 @@ function applyGmailStatusToUI(gmail = {}) {
     badge.textContent = 'דורש התחברות';
     info.textContent = 'יש חשבון שמור, אך יש להשלים התחברות OAuth.';
 }
-        badge.textContent = 'מחובר';
-        const active = gmail.activeEmail || gmail.accounts.find(acc => acc.active)?.email;
-        info.textContent = active ? `חשבון פעיל: ${active}` : 'החיבור פעיל. ניתן לבחור חשבון ברירת מחדל.';
-        return;
-    }
-
-    badge.classList.add('partial');
-    badge.textContent = 'דורש התחברות';
-    info.textContent = 'יש חשבון שמור, אך יש להשלים התחברות OAuth.';
-}
 
 function renderGmailAccounts(accounts = [], activeEmail = null, options = {}) {
     const container = document.getElementById('gmailAccountsList');

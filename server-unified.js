@@ -40,6 +40,7 @@ app.use(express.static('.', {
     etag: true,
     lastModified: true,
     setHeaders: function (res, path) {
+        console.log('📁 Serving static file:', path);
         if (path.endsWith('.css')) {
             res.setHeader('Content-Type', 'text/css');
         }
@@ -810,12 +811,14 @@ app.get('/', (req, res) => {
 
 // Explicit CSS route for debugging
 app.get('/style.css', (req, res) => {
+    console.log('🎨 CSS request received');
     res.setHeader('Content-Type', 'text/css');
     res.sendFile(path.join(__dirname, 'style.css'));
 });
 
 // Explicit JS route for debugging  
 app.get('/app.js', (req, res) => {
+    console.log('📜 JS request received');
     res.setHeader('Content-Type', 'application/javascript');
     res.sendFile(path.join(__dirname, 'app.js'));
 });

@@ -5,6 +5,7 @@ const axios = require('axios');
 const multer = require('multer');
 const DriveService = require('./services/DriveService');
 const GmailService = require('./services/GmailService');
+const LangGraphAgent = require('./services/LangGraphAgent');
 require('dotenv').config();
 
 const app = express();
@@ -25,6 +26,7 @@ const upload = multer({
 
 // Initialize Drive service
 const driveService = new DriveService();
+
 // Initialize Gmail service (if configured)
 let gmailService = null;
 try {
@@ -32,6 +34,18 @@ try {
     console.log('📧 GmailService initialized');
 } catch (e) {
     console.warn('⚠️ GmailService not initialized:', e.message);
+}
+
+// Initialize LangGraph AI Agent
+let langGraphAgent = null;
+try {
+    langGraphAgent = new LangGraphAgent({
+        openaiApiKey: process.env.OPENAI_API_KEY,
+        supabase: null // הוסף כאן את חיבור Supabase אם קיים
+    });
+    console.log('🧠 LangGraph Agent initialized');
+} catch (e) {
+    console.warn('⚠️ LangGraph Agent not initialized:', e.message);
 }
 
 // Serve static files (your HTML, CSS, JS)
@@ -447,9 +461,9 @@ app.get('/api/gmail/status', (req, res) => {
     });
 });
 
-// Gmail sync endpoint
+// Gmail sync endpoint - Enhanced with LangGraph
 app.post('/api/gmail/sync', async (req, res) => {
-    console.log('📧 Gmail sync requested...');
+    console.log('📧 Gmail sync requested with LangGraph processing...');
     
     try {
         if (!gmailService) {
@@ -460,8 +474,43 @@ app.post('/api/gmail/sync', async (req, res) => {
             return res.status(401).json({ success: false, auth_required: true, error: 'auth_required' });
         }
 
+        // שליפת מיילים
         const emails = await gmailService.listRecentEmails(20);
+        console.log(`📧 Retrieved ${emails.length} emails from Gmail API`);
 
+        // עיבוד חכם עם LangGraph
+        if (langGraphAgent && emails.length > 0) {
+            console.log('🧠 Processing emails with AI...');
+            
+            const analysisResult = await langGraphAgent.invoke({
+                currentContext: {
+                    ...langGraphAgent.currentState.currentContext,
+                    emails: emails
+                }
+            });
+
+            const pendingActions = analysisResult.pendingActions || [];
+            console.log(`🎯 AI analyzed emails: ${pendingActions.length} actions suggested`);
+
+            // החזרת התוצאות עם הצעות פעולה לאישור
+            return res.json({
+                success: true,
+                emails: emails.slice(0, 5), // רק 5 הראשונים לתצוגה
+                pendingActions: pendingActions.map(action => ({
+                    id: action.id,
+                    type: action.type,
+                    summary: action.data?.classification?.summary_hebrew || 'פעולה מוצעת',
+                    urgency: action.data?.classification?.urgency || 5,
+                    suggestedAction: action.data?.suggestedAction || 'בדוק את המייל',
+                    emailSubject: action.data?.email?.subject,
+                    requiresApproval: action.requiresApproval
+                })),
+                total: emails.length,
+                aiProcessed: true
+            });
+        }
+
+        // Fallback - עיבוד בסיסי ללא AI
         if (!appData.emails) appData.emails = [];
         let newCount = 0;
 
@@ -480,8 +529,14 @@ app.post('/api/gmail/sync', async (req, res) => {
             }
         });
 
-        console.log(`📧 Gmail sync: ${newCount} new emails ingested (total: ${appData.emails.length})`);
-        return res.json({ success: true, ingested: newCount, total: appData.emails.length, linked: 0 });
+        console.log(`📧 Basic sync: ${newCount} new emails ingested (total: ${appData.emails.length})`);
+        return res.json({ 
+            success: true, 
+            ingested: newCount, 
+            total: appData.emails.length, 
+            aiProcessed: false 
+        });
+
     } catch (error) {
         if (String(error?.message || '').includes('AUTH_REQUIRED')) {
             return res.status(401).json({ success: false, auth_required: true, error: 'auth_required' });
@@ -491,76 +546,236 @@ app.post('/api/gmail/sync', async (req, res) => {
     }
 });
 
-// Gmail Sync Approval Endpoint
+// Gmail Sync Approval Endpoint - Enhanced with LangGraph
 app.post('/api/gmail/sync/approve', async (req, res) => {
     try {
-        const { autoCreateTasks, smartFilter, syncTimeRange, enableLearning, selectedEmails } = req.body;
+        const { approvedActions, rejectedActions, modifications, feedback } = req.body;
         
-        console.log('Gmail sync approval received:', {
-            autoCreateTasks,
-            smartFilter, 
-            syncTimeRange,
-            enableLearning,
-            selectedEmailsCount: selectedEmails?.length || 0
+        console.log('🎯 AI action approval received:', {
+            approved: approvedActions?.length || 0,
+            rejected: rejectedActions?.length || 0,
+            modifications: Object.keys(modifications || {}).length,
+            feedback: feedback ? 'Yes' : 'No'
         });
+
+        if (!langGraphAgent) {
+            return res.status(503).json({ 
+                success: false, 
+                error: 'AI Agent not available' 
+            });
+        }
+
+        const results = [];
         
-        // Here we would normally process the approved emails
-        // For now, create some sample tasks based on the settings
-        const newTasks = [];
-        
-        if (autoCreateTasks && selectedEmails && selectedEmails.length > 0) {
-            for (let i = 0; i < Math.min(selectedEmails.length, 3); i++) {
-                const taskId = generateId();
-                const sampleTask = {
-                    id: taskId,
-                    title: `משימה ממייל #${i + 1}`,
-                    description: `משימה שנוצרה אוטומטית ממייל מאושר`,
-                    priority: 'medium',
-                    status: 'pending',
-                    type: 'tasks',
-                    dueDate: new Date(Date.now() + (i + 1) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-                    createdAt: new Date().toISOString(),
-                    fromEmail: true,
-                    smartFiltered: smartFilter
-                };
-                
-                // Add to appropriate array
-                if (!global.tasks) global.tasks = [];
-                global.tasks.push(sampleTask);
-                newTasks.push(sampleTask);
+        // ביצוע פעולות מאושרות
+        if (approvedActions && approvedActions.length > 0) {
+            for (const actionId of approvedActions) {
+                const action = langGraphAgent.currentState.pendingActions?.find(a => a.id === actionId);
+                if (action) {
+                    try {
+                        const result = await langGraphAgent.executeAction(langGraphAgent.currentState, {
+                            action: action,
+                            approved: true,
+                            modifications: modifications[actionId] || {}
+                        });
+                        
+                        results.push({
+                            actionId,
+                            success: true,
+                            message: 'פעולה בוצעה בהצלחה'
+                        });
+
+                        // עדכון המצב
+                        langGraphAgent.currentState = result;
+                    } catch (error) {
+                        console.error('שגיאה בביצוע פעולה:', error);
+                        results.push({
+                            actionId,
+                            success: false,
+                            message: 'שגיאה בביצוע הפעולה: ' + error.message
+                        });
+                    }
+                }
             }
         }
-        
-        // If learning is enabled, save the user preferences
-        if (enableLearning) {
-            console.log('Learning enabled - saving user preferences for future syncs');
-            // Here we would save the user's preferences for future use
+
+        // למידה מפעולות שנדחו
+        if (rejectedActions && rejectedActions.length > 0) {
+            for (const actionId of rejectedActions) {
+                const action = langGraphAgent.currentState.pendingActions?.find(a => a.id === actionId);
+                if (action) {
+                    await langGraphAgent.learn(langGraphAgent.currentState, {
+                        feedback: {
+                            type: 'action_result',
+                            action: action,
+                            successful: false,
+                            reason: 'User rejected',
+                            userRejection: true
+                        }
+                    });
+                }
+            }
         }
-        
+
+        // למידה מפידבק כללי
+        if (feedback) {
+            await langGraphAgent.learn(langGraphAgent.currentState, {
+                feedback: {
+                    type: 'user_feedback',
+                    ...feedback,
+                    timestamp: new Date().toISOString()
+                }
+            });
+        }
+
+        // ניקוי פעולות שטופלו
+        const handledActionIds = [...(approvedActions || []), ...(rejectedActions || [])];
+        langGraphAgent.currentState.pendingActions = langGraphAgent.currentState.pendingActions?.filter(
+            action => !handledActionIds.includes(action.id)
+        ) || [];
+
+        // שמירת מצב
+        await langGraphAgent.saveState();
+
         res.json({ 
             success: true, 
-            message: 'Gmail sync approved successfully',
-            tasksCreated: newTasks.length,
-            newTasks: newTasks
+            message: 'פעולות טופלו בהצלחה',
+            results: results,
+            remainingActions: langGraphAgent.currentState.pendingActions.length
         });
         
     } catch (error) {
         console.error('Gmail sync approval error:', error);
         res.status(500).json({ 
             success: false, 
-            error: 'Internal server error during Gmail sync approval' 
+            error: 'שגיאה בעיבוד אישור הפעולות: ' + error.message 
         });
     }
 });
 
-// AI Chat Endpoint
+// AI Chat Endpoint - Enhanced with LangGraph
 app.post('/api/ai/chat', async (req, res) => {
     try {
         const { message } = req.body;
         
-        console.log('AI chat message received:', message);
-        
-        // Simple AI responses based on message content
+        console.log('🧠 AI chat message received:', message);
+
+        // עיבוד חכם עם LangGraph
+        if (langGraphAgent) {
+            try {
+                // הוספת ההודעה להיסטוריית הצ'אט
+                langGraphAgent.currentState.chatHistory.push({
+                    user: message,
+                    timestamp: new Date().toISOString()
+                });
+
+                // ניתוח ההודעה וקבלת הוראות
+                const chatAnalysis = await langGraphAgent.openai.invoke(`
+אתה העוזר החכם של מיכל. היא סטודנטית עם ADHD ומנהלת סמינרים.
+
+הודעה מהמשתמש: "${message}"
+
+מצב המערכת הנוכחי:
+- משימות פעילות: ${langGraphAgent.currentState.currentContext.tasks?.length || 0}
+- מיילים לא מעובדים: ${langGraphAgent.currentState.currentContext.emails?.length || 0}
+- מסמכים במערכת: ${langGraphAgent.currentState.currentContext.documents?.length || 0}
+- פעולות ממתינות: ${langGraphAgent.currentState.pendingActions?.length || 0}
+
+ענה בעברית עם JSON:
+{
+  "intent": "create_task|modify_system|learn_feedback|general_help|code_modification",
+  "response": "תשובה בעברית",
+  "actions": [
+    {
+      "type": "create_task|update_settings|modify_code|send_message",
+      "data": {},
+      "description": "תיאור בעברית"
+    }
+  ],
+  "learning": {
+    "pattern": "דפוס שזוהה",
+    "preference": "העדפה שנלמדה"
+  },
+  "priority": 1-10,
+  "requires_approval": true
+}
+
+דוגמאות לעיבוד:
+- "צור משימה לבדוק חוב PAIR" → create_task
+- "שנה צבעים לוורוד" → modify_system  
+- "אני מעדיפה לטפל בחובות בבוקר" → learn_feedback
+- "הוסף כפתור למחיקה" → code_modification
+                `);
+
+                const analysis = JSON.parse(chatAnalysis.content);
+                
+                // יצירת פעולות בהתבסס על הניתוח
+                const pendingActions = [];
+                
+                if (analysis.actions && analysis.actions.length > 0) {
+                    analysis.actions.forEach((action, index) => {
+                        pendingActions.push({
+                            id: `chat_${Date.now()}_${index}`,
+                            type: 'chat_request',
+                            data: {
+                                originalMessage: message,
+                                action: action,
+                                analysis: analysis
+                            },
+                            requiresApproval: analysis.requires_approval,
+                            timestamp: new Date().toISOString(),
+                            source: 'chat_interface'
+                        });
+                    });
+                }
+
+                // למידה אם זוהו דפוסים
+                if (analysis.learning) {
+                    await langGraphAgent.learn(langGraphAgent.currentState, {
+                        feedback: {
+                            type: 'user_pattern',
+                            pattern: analysis.learning.pattern,
+                            preference: analysis.learning.preference,
+                            message: message
+                        }
+                    });
+                }
+
+                // עדכון מצב המערכת
+                langGraphAgent.currentState.pendingActions = [
+                    ...(langGraphAgent.currentState.pendingActions || []),
+                    ...pendingActions
+                ];
+
+                langGraphAgent.currentState.chatHistory.push({
+                    ai: analysis.response,
+                    timestamp: new Date().toISOString(),
+                    intent: analysis.intent,
+                    actionsCreated: pendingActions.length
+                });
+
+                return res.json({
+                    success: true,
+                    response: analysis.response,
+                    intent: analysis.intent,
+                    actions: pendingActions.map(action => ({
+                        id: action.id,
+                        description: action.data.action.description,
+                        type: action.data.action.type,
+                        requiresApproval: action.requiresApproval
+                    })),
+                    learning: analysis.learning,
+                    priority: analysis.priority,
+                    aiProcessed: true
+                });
+
+            } catch (aiError) {
+                console.error('LangGraph chat processing error:', aiError);
+                // נפילה חזרה לעיבוד פשוט
+            }
+        }
+
+        // Fallback - עיבוד פשוט ללא AI
         let response = '';
         let changes = [];
         let refreshNeeded = false;
@@ -593,7 +808,8 @@ app.post('/api/ai/chat', async (req, res) => {
             success: true,
             response: response,
             changes: changes,
-            refreshNeeded: refreshNeeded
+            refreshNeeded: refreshNeeded,
+            aiProcessed: false
         });
         
     } catch (error) {
@@ -654,7 +870,7 @@ app.post('/api/drive/upload', upload.single('document'), async (req, res) => {
     }
 });
 
-// Bulk document upload
+// Bulk document upload - Enhanced with LangGraph
 app.post('/api/drive/bulk-upload', upload.array('documents', 10), async (req, res) => {
     try {
         if (!req.files || req.files.length === 0) {
@@ -665,29 +881,39 @@ app.post('/api/drive/bulk-upload', upload.array('documents', 10), async (req, re
 
         const results = [];
         const errors = [];
+        const documentsForAI = [];
 
         for (const file of req.files) {
             try {
-                // Upload to Drive
+                console.log(`📄 Processing: ${file.originalname}`);
+                
+                // יצירת אובייקט מסמך עם Buffer לעיבוד AI
+                const documentData = {
+                    filename: file.originalname,
+                    mimetype: file.mimetype,
+                    size: file.size,
+                    buffer: require('fs').readFileSync(file.path),
+                    uploadedAt: new Date().toISOString()
+                };
+
+                documentsForAI.push(documentData);
+
+                // Upload to Drive (existing logic)
                 const driveResult = await driveService.uploadDocument(file);
                 
-                // Process with OCR
+                // Basic OCR processing
                 const ocrResult = await driveService.processDocumentOCR(driveResult.fileId);
                 
-                // Create task from document
-                const task = await driveService.createTaskFromDocument(ocrResult, driveResult);
-                
-                // Add to tasks array
-                if (!global.tasks) global.tasks = [];
-                global.tasks.push(task);
-
                 results.push({
                     file: file.originalname,
                     document: driveResult,
-                    task: task
+                    size: file.size,
+                    mimetype: file.mimetype,
+                    basicProcessing: true
                 });
 
             } catch (error) {
+                console.error(`Error processing ${file.originalname}:`, error);
                 errors.push({
                     file: file.originalname,
                     error: error.message
@@ -695,11 +921,53 @@ app.post('/api/drive/bulk-upload', upload.array('documents', 10), async (req, re
             }
         }
 
+        // עיבוד חכם עם LangGraph אם זמין
+        let aiAnalysis = null;
+        if (langGraphAgent && documentsForAI.length > 0) {
+            try {
+                console.log('🧠 Processing documents with AI...');
+                
+                const analysisResult = await langGraphAgent.invoke({
+                    currentContext: {
+                        ...langGraphAgent.currentState.currentContext,
+                        documents: documentsForAI
+                    }
+                });
+
+                const pendingActions = analysisResult.pendingActions?.filter(
+                    action => action.source === 'document_processing'
+                ) || [];
+
+                aiAnalysis = {
+                    processedDocuments: documentsForAI.length,
+                    suggestedActions: pendingActions.length,
+                    actions: pendingActions.map(action => ({
+                        id: action.id,
+                        type: action.type,
+                        summary: action.data?.analysis?.summary || 'מסמך עובד',
+                        documentType: action.data?.analysis?.document_type || 'unknown',
+                        suggestedTasks: action.data?.analysis?.suggested_tasks || [],
+                        requiresApproval: action.requiresApproval
+                    }))
+                };
+
+                console.log(`🎯 AI analysis complete: ${pendingActions.length} actions suggested`);
+                
+            } catch (aiError) {
+                console.error('AI processing error:', aiError);
+                aiAnalysis = { error: 'שגיאה בעיבוד AI: ' + aiError.message };
+            }
+        }
+
         res.json({
             success: true,
             message: `עובדו ${results.length} מסמכים מתוך ${req.files.length}`,
             results: results,
-            errors: errors
+            errors: errors,
+            aiAnalysis: aiAnalysis,
+            nextStep: aiAnalysis?.suggestedActions > 0 
+                ? 'בדוק את הפעולות המוצעות וציין איזה לבצע'
+                : 'העלאה הושלמה בהצלחה'
         });
 
     } catch (error) {
@@ -718,6 +986,91 @@ app.get('/api/drive/status', (req, res) => {
         authenticated: driveService.isAuthenticated,
         available: true
     });
+});
+
+// AI System Status and Pending Actions
+app.get('/api/ai/status', (req, res) => {
+    try {
+        if (!langGraphAgent) {
+            return res.json({
+                success: true,
+                aiAvailable: false,
+                message: 'AI system not initialized'
+            });
+        }
+
+        const systemStatus = langGraphAgent.getSystemStatus();
+        const pendingActions = langGraphAgent.currentState.pendingActions || [];
+        const recentChat = langGraphAgent.currentState.chatHistory?.slice(-5) || [];
+
+        res.json({
+            success: true,
+            aiAvailable: true,
+            system: systemStatus,
+            pendingActions: pendingActions.map(action => ({
+                id: action.id,
+                type: action.type,
+                summary: action.data?.classification?.summary_hebrew || 
+                        action.data?.analysis?.summary ||
+                        action.data?.action?.description ||
+                        'פעולה ממתינה',
+                source: action.source,
+                timestamp: action.timestamp,
+                requiresApproval: action.requiresApproval,
+                urgency: action.data?.classification?.urgency || 
+                        action.data?.analysis?.urgency || 5
+            })).sort((a, b) => b.urgency - a.urgency), // מיון לפי דחיפות
+            recentActivity: recentChat,
+            statistics: {
+                totalActionsToday: pendingActions.filter(a => {
+                    const today = new Date().toDateString();
+                    return new Date(a.timestamp).toDateString() === today;
+                }).length,
+                highPriorityActions: pendingActions.filter(a => 
+                    (a.data?.classification?.urgency || a.data?.analysis?.urgency || 5) >= 7
+                ).length,
+                emailsProcessed: systemStatus.emailsInMemory,
+                documentsProcessed: systemStatus.documentsInMemory
+            }
+        });
+        
+    } catch (error) {
+        console.error('AI status error:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: 'שגיאה בקבלת סטטוס AI' 
+        });
+    }
+});
+
+// AI Learning Endpoint - Get and Update Learning Data
+app.get('/api/ai/learning', (req, res) => {
+    try {
+        if (!langGraphAgent) {
+            return res.status(503).json({ error: 'AI system not available' });
+        }
+
+        const memory = langGraphAgent.currentState.memory;
+        
+        res.json({
+            success: true,
+            learning: {
+                clientPreferences: Object.keys(memory.clientPreferences || {}).length,
+                workPatterns: Object.keys(memory.workPatterns || {}).length,
+                successfulActions: memory.successfulActions?.length || 0,
+                commonMistakes: memory.commonMistakes?.length || 0,
+                totalFeedback: memory.feedback?.length || 0,
+                recentFeedback: memory.feedback?.slice(-5) || []
+            }
+        });
+        
+    } catch (error) {
+        console.error('Learning data error:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: 'שגיאה בקבלת נתוני למידה' 
+        });
+    }
 });
 
 // Gmail auth URL

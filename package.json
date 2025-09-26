@@ -20,6 +20,9 @@
     "user:list": "node cli.js user list"
   },
   "dependencies": {
+    "@langchain/core": "^0.1.62",
+    "@langchain/langgraph": "^0.0.22",
+    "@langchain/openai": "^0.0.28",
     "@supabase/supabase-js": "^2.57.4",
     "axios": "^1.12.2",
     "bcryptjs": "^2.4.3",
@@ -34,11 +37,14 @@
     "joi": "^17.9.2",
     "jsonwebtoken": "^9.0.1",
     "moment": "^2.29.4",
-    "multer": "^1.4.4",
+    "multer": "^2.0.2",
+    "node-cron": "^3.0.3",
     "nodemailer": "^6.9.4",
     "openai": "^4.0.0",
+    "pdf-parse": "^1.1.1",
     "pg": "^8.11.1",
     "socket.io": "^4.7.2",
+    "tesseract.js": "^4.1.4",
     "uuid": "^9.0.0",
     "winston": "^3.10.0"
   },

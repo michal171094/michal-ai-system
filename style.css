@@ -3132,10 +3132,28 @@ body {
     transform: translateX(100%);
     transition: transform 0.3s ease;
     z-index: 1001;
+    max-width: 400px;
+    font-size: 14px;
+    line-height: 1.4;
 }
 
 .sync-notification.show {
     transform: translateX(0);
+}
+
+.sync-notification.warning {
+    background: #f59e0b;
+    border-left: 4px solid #d97706;
+}
+
+.sync-notification.error {
+    background: #ef4444;
+    border-left: 4px solid #dc2626;
+}
+
+.sync-notification.success {
+    background: #10b981;
+    border-left: 4px solid #059669;
 }
 
 /* Update Detail Modal */

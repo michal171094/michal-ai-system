@@ -550,7 +550,15 @@ async function loadConnectorsDashboard(options = {}) {
 
     try {
         const response = await fetch('/api/connectors/status');
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (!response.ok) {
+            if (response.status === 503) {
+                // Gmail service is disabled - show configuration help
+                applyGmailStatusToUI({ accounts: [], configured: false, authenticated: false, disabled: true });
+                renderGmailAccounts([], null, { disabled: true });
+                return;
+            }
+            throw new Error(`HTTP ${response.status}`);
+        }
         const payload = await response.json();
         const gmail = payload?.data?.gmail || { accounts: [], configured: false, authenticated: false };
         applyGmailStatusToUI(gmail);
@@ -568,6 +576,13 @@ function applyGmailStatusToUI(gmail = {}) {
     if (!badge || !info) return;
 
     badge.classList.remove('online', 'offline', 'partial');
+
+    if (gmail.disabled) {
+        badge.classList.add('offline');
+        badge.textContent = 'לא מוגדר';
+        info.textContent = '🔧 שירות Gmail לא מוגדר. נדרשים הגדרות OAuth במשתני הסביבה של השרת.';
+        return;
+    }
 
     if ((gmail.accounts || []).length === 0) {
         badge.classList.add('offline');
@@ -588,11 +603,40 @@ function applyGmailStatusToUI(gmail = {}) {
     badge.textContent = 'דורש התחברות';
     info.textContent = 'יש חשבון שמור, אך יש להשלים התחברות OAuth.';
 }
+        badge.textContent = 'מחובר';
+        const active = gmail.activeEmail || gmail.accounts.find(acc => acc.active)?.email;
+        info.textContent = active ? `חשבון פעיל: ${active}` : 'החיבור פעיל. ניתן לבחור חשבון ברירת מחדל.';
+        return;
+    }
+
+    badge.classList.add('partial');
+    badge.textContent = 'דורש התחברות';
+    info.textContent = 'יש חשבון שמור, אך יש להשלים התחברות OAuth.';
+}
 
 function renderGmailAccounts(accounts = [], activeEmail = null, options = {}) {
     const container = document.getElementById('gmailAccountsList');
     if (!container) return;
     container.innerHTML = '';
+
+    if (options.disabled) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <h3>🔧 דרושה הגדרה</h3>
+                <p>שירות Gmail לא מוגדר במערכת.</p>
+                <div style="background: #fef3c7; border: 1px solid #f59e0b; border-radius: 8px; padding: 15px; margin-top: 10px; font-size: 14px;">
+                    <p><strong>למפתח:</strong> נדרש להגדיר משתני סביבה:</p>
+                    <ul style="margin: 8px 0; padding-right: 20px;">
+                        <li><code>GOOGLE_CLIENT_ID</code></li>
+                        <li><code>GOOGLE_CLIENT_SECRET</code></li>
+                        <li><code>GOOGLE_REDIRECT_URI</code> (אופציונלי)</li>
+                    </ul>
+                    <p>בקבלת האישורים מ-Google Console.</p>
+                </div>
+            </div>
+        `;
+        return;
+    }
 
     if (options.error) {
         container.innerHTML = '<div class="empty-state">לא ניתן לטעון את רשימת החשבונות כרגע.</div>';
@@ -630,7 +674,17 @@ async function initiateGmailOAuth() {
     if (button) button.disabled = true;
     try {
         const response = await fetch('/api/gmail/auth-url');
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (!response.ok) {
+            if (response.status === 503) {
+                const errorData = await response.json().catch(() => ({}));
+                if (errorData.error === 'Gmail service disabled') {
+                    showNotification('🔧 Gmail לא מוגדר - נדרשים הגדרות OAuth מהמפתח', 'warning');
+                    if (button) button.disabled = false;
+                    return;
+                }
+            }
+            throw new Error(`HTTP ${response.status}`);
+        }
         const data = await response.json();
         if (data?.url) {
             window.location.href = data.url;
@@ -1580,10 +1634,10 @@ function updateSelectionCount() {
     });
 }
 
-function showNotification(message) {
+function showNotification(message, type = 'info') {
     // Create and show notification
     const notification = document.createElement('div');
-    notification.className = 'sync-notification';
+    notification.className = `sync-notification ${type}`;
     notification.textContent = message;
     document.body.appendChild(notification);
     
@@ -1593,7 +1647,7 @@ function showNotification(message) {
     
     setTimeout(() => {
         notification.remove();
-    }, 3000);
+    }, type === 'warning' ? 5000 : 3000); // Warning messages stay longer
 }
 // Action handler functions for sync modal
 function performAction(updateId, action) {

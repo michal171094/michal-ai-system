@@ -192,32 +192,8 @@ class Database {
         try {
             const bcrypt = require('bcryptjs');
             const hashedPassword = await bcrypt.hash('michal123', 12);
-            
-            const existingUser = await this.query(
-                'SELECT id FROM users WHERE email = $1',
-                ['michal@example.com']
-            );
-            
-            if (existingUser.rows.length === 0) {
-                await this.query(`
-                    INSERT INTO users (email, password_hash, full_name, role, preferences)
-                    VALUES ($1, $2, $3, $4, $5)
-                `, [
-                    'michal@example.com',
-                    hashedPassword,
-                    'מיכל',
-                    'admin',
-                    JSON.stringify({
-                        language: 'he',
-                        notifications: true,
-                        theme: 'light'
-                    })
-                ]);
-                
-                logger.info('👤 משתמש ברירת מחדל נוצר: michal@example.com');
-            } else {
-                logger.info('👤 משתמש ברירת מחדל קיים כבר');
-            }
+            // No default user creation - users must register or authenticate properly
+            logger.info('🏁 Database initialization complete - ready for real users');
         } catch (error) {
             logger.error('שגיאה ביצירת משתמש ברירת מחדל:', error);
             throw error;

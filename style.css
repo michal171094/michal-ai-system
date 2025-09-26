@@ -4391,3 +4391,64 @@ tr.priority-pending {
         max-height: 95vh;
     }
 }
+
+/* Management Actions */
+.management-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin: 20px 0;
+    flex-wrap: wrap;
+}
+
+.mgmt-btn {
+    padding: 12px 20px;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.mgmt-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+}
+
+.mgmt-btn.primary {
+    background: #3498db;
+    color: white;
+}
+
+.mgmt-btn.primary:hover {
+    background: #2980b9;
+}
+
+.mgmt-btn.secondary {
+    background: #95a5a6;
+    color: white;
+}
+
+.mgmt-btn.secondary:hover {
+    background: #7f8c8d;
+}
+
+.mgmt-btn.success {
+    background: #27ae60;
+    color: white;
+}
+
+.mgmt-btn.success:hover {
+    background: #219a52;
+}
+
+.mgmt-btn.danger {
+    background: #e74c3c;
+    color: white;
+}
+
+.mgmt-btn.danger:hover {
+    background: #c0392b;
+}

@@ -2399,4 +2399,73 @@ document.addEventListener('keydown', (e) => {
     }
 });
 
+// ===== MANAGEMENT FUNCTIONS =====
+
+// Clear all tasks
+async function clearAll() {
+    if (!confirm('❌ האם את בטוחה שברצונך למחוק את כל המשימות? פעולה זו לא ניתנת לביטול.')) {
+        return;
+    }
+    
+    try {
+        showNotification('⏳ מוחק את כל המשימות...', 'info');
+        
+        // Clear all task types
+        const taskTypes = ['tasks', 'debts', 'bureaucracy'];
+        for (const type of taskTypes) {
+            const response = await fetch(`/api/${type}`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Failed to delete ${type}`);
+            }
+        }
+        
+        showNotification('✅ כל המשימות נמחקו בהצלחה', 'success');
+        loadInitialData(); // Refresh the display
+        
+    } catch (error) {
+        console.error('Error clearing all tasks:', error);
+        showNotification('❌ שגיאה במחיקת המשימות: ' + error.message, 'error');
+    }
+}
+
+// Add bulk tasks
+function addBulkTasks() {
+    window.open('/bulk-tasks-improved.html', '_blank');
+}
+
+// Select all tasks (placeholder - could be used for batch operations)
+function selectAll() {
+    showNotification('✅ כל המשימות נבחרו', 'success');
+    // Here you could implement actual selection logic
+}
+
+// Deselect all tasks (placeholder - could be used for batch operations)
+function deselectAll() {
+    showNotification('☐ כל הבחירות בוטלו', 'info');
+    // Here you could implement actual deselection logic
+}
+
+// Enhanced add task functionality for each tab
+function addTaskForCurrentTab() {
+    const currentTab = document.querySelector('.nav-tab.active')?.dataset.tab;
+    
+    switch(currentTab) {
+        case 'academic':
+            openTaskModal('academic');
+            break;
+        case 'debts':
+            openTaskModal('debts');
+            break;
+        case 'bureaucracy':
+            openTaskModal('bureaucracy');
+            break;
+        default:
+            openTaskModal('academic');
+    }
+}
+
 console.log('✅ מיכל AI - מערכת עוזרת אישית מוכנה לעבודה! 🚀');

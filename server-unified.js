@@ -143,6 +143,26 @@ app.put('/api/tasks/:id', (req,res)=> {
   res.json({ success:true, data: appData.tasks[idx] });
 });
 
+// Delete all tasks
+app.delete('/api/tasks', (req,res)=> {
+  const deletedCount = appData.tasks.length;
+  appData.tasks = [];
+  saveAppData();
+  AgentCore.memory.addEvent('all_tasks_deleted', { count: deletedCount });
+  res.json({ success:true, deleted: deletedCount });
+});
+
+// Delete single task
+app.delete('/api/tasks/:id', (req,res)=> {
+  const id = Number(req.params.id);
+  const idx = appData.tasks.findIndex(t=> Number(t.id) === id);
+  if (idx === -1) return res.status(404).json({ success:false, error:'task not found' });
+  const deleted = appData.tasks.splice(idx, 1)[0];
+  saveAppData();
+  AgentCore.memory.addEvent('task_deleted', { id });
+  res.json({ success:true, data: deleted });
+});
+
 app.get('/api/debts', (req,res)=> res.json({ success:true, data: appData.debts }));
 app.post('/api/debts', (req,res)=> { const d = req.body; d.id = Date.now(); appData.debts.push(d); saveAppData(); AgentCore.memory.addEvent('debt_created', {id:d.id}); res.json({success:true, data:d}); });
 app.put('/api/debts/:id', (req,res)=> {
@@ -155,6 +175,15 @@ app.put('/api/debts/:id', (req,res)=> {
   res.json({ success:true, data: appData.debts[idx] });
 });
 
+// Delete all debts
+app.delete('/api/debts', (req,res)=> {
+  const deletedCount = appData.debts.length;
+  appData.debts = [];
+  saveAppData();
+  AgentCore.memory.addEvent('all_debts_deleted', { count: deletedCount });
+  res.json({ success:true, deleted: deletedCount });
+});
+
 app.get('/api/bureaucracy', (req,res)=> res.json({ success:true, data: appData.bureaucracy }));
 app.post('/api/bureaucracy', (req,res)=> { const b = req.body; b.id = Date.now(); appData.bureaucracy.push(b); saveAppData(); AgentCore.memory.addEvent('bureau_created', {id:b.id}); res.json({success:true, data:b}); });
 app.put('/api/bureaucracy/:id', (req,res)=> {
@@ -165,6 +194,15 @@ app.put('/api/bureaucracy/:id', (req,res)=> {
   saveAppData();
   AgentCore.memory.addEvent('bureau_updated', { id, changes: req.body });
   res.json({ success:true, data: appData.bureaucracy[idx] });
+});
+
+// Delete all bureaucracy items
+app.delete('/api/bureaucracy', (req,res)=> {
+  const deletedCount = appData.bureaucracy.length;
+  appData.bureaucracy = [];
+  saveAppData();
+  AgentCore.memory.addEvent('all_bureaucracy_deleted', { count: deletedCount });
+  res.json({ success:true, deleted: deletedCount });
 });
 
 // ---------- AgentCore endpoints ----------

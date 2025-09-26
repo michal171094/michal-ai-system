@@ -35,7 +35,19 @@ try {
 }
 
 // Serve static files (your HTML, CSS, JS)
-app.use(express.static('.'));
+app.use(express.static('.', {
+    maxAge: '1h',
+    etag: true,
+    lastModified: true,
+    setHeaders: function (res, path) {
+        if (path.endsWith('.css')) {
+            res.setHeader('Content-Type', 'text/css');
+        }
+        if (path.endsWith('.js')) {
+            res.setHeader('Content-Type', 'application/javascript');
+        }
+    }
+}));
 
 // Mock data - Full Data Set
 const appData = {
@@ -794,6 +806,18 @@ app.get('/api/connectors/status', (req, res) => {
 // Serve main page
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+// Explicit CSS route for debugging
+app.get('/style.css', (req, res) => {
+    res.setHeader('Content-Type', 'text/css');
+    res.sendFile(path.join(__dirname, 'style.css'));
+});
+
+// Explicit JS route for debugging  
+app.get('/app.js', (req, res) => {
+    res.setHeader('Content-Type', 'application/javascript');
+    res.sendFile(path.join(__dirname, 'app.js'));
 });
 
 // Start server

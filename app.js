@@ -698,13 +698,26 @@ function handleGmailOAuthCallback() {
         const email = params.get('connected');
         showNotification(email ? `✅ החשבון ${email} חובר בהצלחה!` : '✅ חשבון Gmail חובר בהצלחה!');
     } else if (gmailStatus === 'error') {
-        showNotification('📧 Gmail זמנית לא זמין - המערכת עובדת ללא סינכרון מיילים.', 'info');
+        const reason = params.get('reason');
+        if (reason) {
+            // Surface common OAuth errors more clearly
+            const readable = decodeURIComponent(reason);
+            const hint = readable.includes('redirect_uri_mismatch')
+                ? 'בדקי שה-Redirect URI מוגדר זהה בדיוק גם ב-Google Console וגם בשרת ההפצה.'
+                : readable.includes('access_denied')
+                ? 'אישרת את הבקשה? אם לא, נסי שוב ותני הרשאה.'
+                : null;
+            showNotification(`❌ חיבור Gmail נכשל: ${readable}${hint ? ` — ${hint}` : ''}`, 'warning');
+        } else {
+            showNotification('📧 Gmail זמנית לא זמין - המערכת עובדת ללא סינכרון מיילים.', 'info');
+        }
     } else if (gmailStatus === 'missing_code') {
         showNotification('📧 Gmail זמנית לא זמין - המערכת עובדת ללא סינכרון מיילים.', 'info');
     }
 
     params.delete('gmail');
     params.delete('connected');
+    params.delete('reason');
     const cleaned = params.toString();
     const newUrl = cleaned ? `${window.location.pathname}?${cleaned}` : window.location.pathname;
     window.history.replaceState({}, document.title, newUrl);

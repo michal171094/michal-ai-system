@@ -4,15 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>עוזרת AI אישית - מיכל</title>
-    <link rel="stylesheet" href="style.css?v=20250926-2">
-    <link rel="stylesheet" href="modal-styles.css?v=20250926-2">
+    <link rel="stylesheet" href="style.css?v=20250926-3">
+    <link rel="stylesheet" href="modal-styles.css?v=20250926-3">
 </head>
 <body>
     <div class="app-container">
-        <!-- Header -->
         <header class="app-header">
             <div class="header-content">
-                <h1>מערכת מיכל AI - מעודכנת!</h1>
+                <h1>מערכת מיכל AI</h1>
                 <div class="header-info">
                     <span class="status-indicator active">🟢 מחובר</span>
                     <span class="user-info">👋 שלום מיכל!</span>
@@ -20,7 +19,6 @@
             </div>
         </header>
 
-        <!-- Navigation -->
         <nav class="app-nav">
             <div class="nav-tabs">
                 <button class="nav-tab active" data-tab="smart-overview">🤖 סקירה חכמה</button>
@@ -31,373 +29,178 @@
             </div>
         </nav>
 
-        <!-- Main Content -->
         <main class="app-main">
-            <!-- Scripts -->
-            <script src="app.js?v=20250926-fixed"></script>
-        </body>
-        </html>
-                            </div>
-                        </div>
+            <div class="content-section">
+                <!-- Smart Overview Panel -->
+                <section id="smart-overview" class="tab-panel active">
+                    <div id="systemStatusIndicator" class="system-status">
+                        <span class="status-dot active"></span>
+                        <span class="status-text">מערכת פעילה</span>
+                    </div>
 
-                        <!-- Overview Tab -->
-                        <div id="overview" class="tab-panel">
-                            <h2>סקירה כללית</h2>
-                            <div class="overview-grid">
-                                <div class="overview-section">
-                                    <h3>דחוף היום</h3>
-                                    <div id="urgentToday" class="urgent-list">
-                                        <!-- Will be populated by JS -->
-                                    </div>
-                                </div>
-                                <div class="overview-section">
-                                    <h3>השבוע הקרוב</h3>
-                                    <div id="thisWeek" class="week-list">
-                                        <!-- Will be populated by JS -->
-                                    </div>
-                                </div>
-                            </div>
+                    <div class="stats-grid">
+                        <div class="stat-card critical">
+                            <div class="stat-number" id="criticalCount">0</div>
+                            <div class="stat-label">קריטיים</div>
                         </div>
+                        <div class="stat-card urgent">
+                            <div class="stat-number" id="urgentCount">0</div>
+                            <div class="stat-label">דחופים</div>
+                        </div>
+                        <div class="stat-card pending">
+                            <div class="stat-number" id="pendingCount">0</div>
+                            <div class="stat-label">פתוחים</div>
+                        </div>
+                        <div class="stat-card emails">
+                            <div class="stat-number" id="emailTasksCount">0</div>
+                            <div class="stat-label">מיילים</div>
+                        </div>
+                    </div>
 
-                        <!-- Priorities Tab -->
-                        <div id="priorities" class="tab-panel">
-                            <h2>תעדוף חכם (AgentCore)</h2>
-                            <div class="priorities-toolbar">
-                                <button id="refreshPrioritiesBtn" class="action-btn secondary">🔄 רענון תעדוף</button>
-                                <button id="runSyncSimBtn" class="action-btn secondary">🛰️ סימולציית סנכרון</button>
-                                <button id="loadQuestionsBtn" class="action-btn secondary">❓ שאלות פתוחות (<span id="questionsCount">0</span>)</button>
-                                <button id="gmailSyncBtn" class="action-btn secondary">📨 סנכרון מיילים</button>
-                                <button id="autoActionsBtn" class="action-btn secondary">🤖 פעולות חכמות</button>
-                                <div class="balance-input-group">
-                                    <label for="balanceInput">יתרה בחשבון:</label>
-                                    <input type="number" id="balanceInput" placeholder="2000" style="width:120px;" />
-                                    <button id="updateBalanceBtn" class="action-btn primary small">עדכון</button>
-                                </div>
-                            </div>
-                            <div id="questionsPanel" class="questions-panel" style="display:none"></div>
-                            <div id="autoActionsPanel" class="questions-panel" style="display:none"></div>
-                            <div id="emailThreadPanel" class="email-thread-panel" style="display:none">
-                                <div class="etp-header">
-                                    <span class="etp-title">תכתובת מיילים</span>
-                                    <button class="close-etp" id="closeEmailThreadBtn">✖</button>
-                                </div>
-                                <div class="etp-body" id="emailThreadBody">(בחרי פריט עם מיילים)</div>
-                            </div>
-                            <div class="table-container priorities-table-wrapper">
-                                <table class="priorities-table" id="prioritiesTable">
-                                    <thead>
-                                        <tr>
-                                            <th>משימה / פריט</th>
-                                            <th>דדליין</th>
-                                            <th>סכום</th>
-                                            <th>סטטוס</th>
-                                            <th>תכתובת</th>
-                                            <th>AI ציון</th>
-                                            <th>פעולה הבאה</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="prioritiesTableBody">
-                                        <tr><td colspan="7" style="text-align:center;padding:20px;">טוען תעדוף...</td></tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
+                    <div class="table-container">
+                        <table class="smart-table">
+                            <thead>
+                                <tr>
+                                    <th>AI</th>
+                                    <th>כותרת</th>
+                                    <th>תחום</th>
+                                    <th>גורם</th>
+                                    <th>דדליין</th>
+                                    <th>נותר</th>
+                                    <th>דחיפות</th>
+                                    <th>פעולה</th>
+                                </tr>
+                            </thead>
+                            <tbody id="smartTableBody">
+                                <tr><td colspan="8" style="text-align:center;padding:20px;">⏳ טוען נתונים...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
 
-                        <!-- Connectors Tab -->
-                        <div id="connectors" class="tab-panel">
-                            <h2>חיבורים ושירותים</h2>
-                            <div class="connectors-grid">
-                                <section class="connector-card">
-                                    <div class="connector-header">
-                                        <div>
-                                            <h3>📧 Gmail</h3>
-                                            <p class="connector-subtitle">סנכרון מיילים ותכתובות</p>
-                                        </div>
-                                        <span id="gmailStatusBadge" class="status-chip offline">מנותק</span>
-                                    </div>
-                                    <div class="connector-body">
-                                        <p class="connector-info" id="gmailStatusInfo">בודק סטטוס...</p>
-                                        <div class="accounts-list" id="gmailAccountsList"></div>
-                                        <div class="connector-actions">
-                                            <button id="gmailConnectBtn" class="action-btn primary">🔗 התחברות</button>
-                                            <button id="gmailRefreshBtn" class="action-btn secondary">🔄 בדיקת סטטוס</button>
-                                        </div>
-                                    </div>
-                                </section>
-                                <section class="connector-card disabled">
-                                    <div class="connector-header">
-                                        <div>
-                                            <h3>📂 Google Drive</h3>
-                                            <p class="connector-subtitle">בקרוב: מסמכים וקבצים</p>
-                                        </div>
-                                        <span class="status-chip offline">בקרוב</span>
-                                    </div>
-                                </section>
-                                <section class="connector-card disabled">
-                                    <div class="connector-header">
-                                        <div>
-                                            <h3>💬 WhatsApp</h3>
-                                            <p class="connector-subtitle">בקרוב: סנכרון שיחות</p>
-                                        </div>
-                                        <span class="status-chip offline">בקרוב</span>
-                                    </div>
-                                </section>
+                    <div class="domains-grid">
+                        <section>
+                            <h3>אקדמיה</h3>
+                            <table id="academicTable">
+                                <thead>
+                                    <tr>
+                                        <th>פרויקט</th><th>לקוח</th><th>דדליין</th><th>סטטוס</th><th>דחיפות</th><th>פעולה</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </section>
+                        <section>
+                            <h3>חובות</h3>
+                            <table id="debtsTable">
+                                <thead>
+                                    <tr>
+                                        <th>נושה</th><th>חברה</th><th>סכום</th><th>מספר תיק</th><th>סטטוס</th><th>דדליין</th><th>פעולה</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </section>
+                        <section>
+                            <h3>בירוקרטיה</h3>
+                            <table id="bureaucracyTable">
+                                <thead>
+                                    <tr>
+                                        <th>משימה</th><th>רשות</th><th>דדליין</th><th>סטטוס</th><th>דחיפות</th><th>פעולה</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </section>
+                    </div>
+                </section>
+
+                <!-- Tasks Panel (placeholder) -->
+                <section id="tasks" class="tab-panel">
+                    <div class="empty-state">ניהול משימות יופיע כאן.</div>
+                </section>
+
+                <!-- Debts Panel (placeholder) -->
+                <section id="debts" class="tab-panel">
+                    <div class="empty-state">ניהול חובות יופיע כאן.</div>
+                </section>
+
+                <!-- Bureaucracy Panel (placeholder) -->
+                <section id="bureaucracy" class="tab-panel">
+                    <div class="empty-state">ניהול בירוקרטיה יופיע כאן.</div>
+                </section>
+
+                <!-- Connectors Panel -->
+                <section id="connector-status" class="tab-panel">
+                    <h2>חיבורים ושירותים</h2>
+                    <div class="connectors-grid">
+                        <section class="connector-card">
+                            <div class="connector-header">
+                                <div>
+                                    <h3>📧 Gmail</h3>
+                                    <p class="connector-subtitle">סנכרון מיילים ותכתובות</p>
+                                </div>
+                                <span id="gmailStatusBadge" class="status-chip offline">מנותק</span>
                             </div>
-                        </div>
+                            <div class="connector-body">
+                                <p class="connector-info" id="gmailStatusInfo">בודק סטטוס...</p>
+                                <div class="accounts-list" id="gmailAccountsList"></div>
+                                <div class="connector-actions">
+                                    <button id="gmailConnectBtn" class="action-btn primary">🔗 התחברות</button>
+                                    <button id="gmailRefreshBtn" class="action-btn secondary">🔄 בדיקת סטטוס</button>
+                                    <button id="gmailQuickSyncBtn" class="action-btn secondary">📨 סנכרן עכשיו</button>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+                </section>
+            </div>
+
+            <!-- Right Side - Chat -->
+            <div class="chat-section">
+                <div class="chat-header">
+                    <h3>עוזרת AI</h3>
+                    <div class="chat-status"><div class="status-indicator online"></div><span>מחוברת</span></div>
+                </div>
+                <div class="quick-questions">
+                    <h4>שאלות מהירות:</h4>
+                    <div class="quick-question-buttons">
+                        <button class="quick-btn" data-question="מה דחוף היום?">מה דחוף היום?</button>
+                        <button class="quick-btn" data-question="איך אני עונה ל-PAIR Finance?">איך עונים ל-PAIR Finance?</button>
+                        <button class="quick-btn" data-question="מה המצב עם הבירוקרטיה?">מצב הבירוקרטיה</button>
+                        <button class="quick-btn" data-question="הכן טיוטת מייל">הכנת טיוטת מייל</button>
                     </div>
                 </div>
-
-                <!-- Right Side - Chat Interface -->
-                <div class="chat-section">
-                    <div class="chat-header">
-                        <h3>עוזרת AI</h3>
-                        <div class="chat-status">
-                            <div class="status-indicator online"></div>
-                            <span>מחוברת</span>
-                        </div>
+                <div class="chat-messages" id="chatMessages"></div>
+                <div class="chat-input-area">
+                    <div class="file-upload-mini">
+                        <input type="file" id="chatFileInput" class="hidden" multiple>
+                        <button class="file-btn" id="fileUploadBtn">📎</button>
                     </div>
-
-                    <!-- Quick Questions -->
-                    <div class="quick-questions">
-                        <h4>שאלות מהירות:</h4>
-                        <div class="quick-question-buttons">
-                            <button class="quick-btn" data-question="מה דחוף היום?">מה דחוף היום?</button>
-                            <button class="quick-btn" data-question="איך אני עונה ל-PAIR Finance?">איך עונים ל-PAIR Finance?</button>
-                            <button class="quick-btn" data-question="מה המצב עם הבירוקרטיה?">מצב הבירוקרטיה</button>
-                            <button class="quick-btn" data-question="הכן טיוטת מייל">הכנת טיוטת מייל</button>
-                        </div>
-                    </div>
-
-                    <!-- Chat Messages -->
-                    <div class="chat-messages" id="chatMessages">
-                        <div class="message ai-message">
-                            <div class="message-content">
-                                שלום מיכל! יש לך כמה משימות דחופות היום - הסמינריון של כרמית וההתנגדות ל-PAIR Finance. איך אני יכולה לעזור?
-                            </div>
-                            <div class="message-time">18:00</div>
-                        </div>
-                    </div>
-
-                    <!-- Chat Input -->
-                    <div class="chat-input-area">
-                        <div class="file-upload-mini">
-                            <input type="file" id="chatFileInput" class="hidden" multiple>
-                            <button class="file-btn" id="fileUploadBtn">📎</button>
-                        </div>
-                        <div class="voice-input">
-                            <button class="voice-btn" id="voiceBtn">🎤</button>
-                        </div>
-                        <div class="text-input">
-                            <textarea id="chatInput" placeholder="הקלידי שאלה או בקשה..." rows="2"></textarea>
-                            <button class="send-btn" id="sendBtn">שלח</button>
-                        </div>
+                    <div class="voice-input"><button class="voice-btn" id="voiceBtn">🎤</button></div>
+                    <div class="text-input">
+                        <textarea id="chatInput" placeholder="הקלידי שאלה או בקשה..." rows="2"></textarea>
+                        <button class="send-btn" id="sendBtn">שלח</button>
                     </div>
                 </div>
             </div>
         </main>
-
-        <!-- Action Modal -->
-        <div id="actionModal" class="modal hidden">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h3 id="actionModalTitle">פעולה נדרשת</h3>
-                    <button class="modal-close" id="actionModalClose">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <div id="actionModalContent">
-                        <!-- Action content will be populated by JS -->
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn--secondary" id="actionModalCancel">ביטול</button>
-                    <button class="btn btn--primary" id="actionModalSave">בצע פעולה</button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Email Draft Modal -->
-        <div id="emailModal" class="modal hidden">
-            <div class="modal-content email-modal">
-                <div class="modal-header">
-                    <h3 id="emailModalTitle">טיוטת מייל/מכתב</h3>
-                    <button class="modal-close" id="emailModalClose">&times;</button>
-                </div>
-                <div class="modal-body">
-                    <div class="form-group">
-                        <label class="form-label">נושא:</label>
-                        <input type="text" class="form-control" id="emailSubject">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">תוכן המכתב:</label>
-                        <textarea class="form-control" id="emailContent" rows="10"></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">קבצים מצורפים נדרשים:</label>
-                        <div id="requiredAttachments" class="attachments-list">
-                            <!-- Will be populated by JS -->
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">הצעדים הבאים:</label>
-                        <div id="nextSteps" class="next-steps-list">
-                            <!-- Will be populated by JS -->
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn--secondary" id="emailModalCancel">ביטול</button>
-                    <button class="btn btn--primary" id="emailModalCopy">העתק לטקסט</button>
-                    <button class="btn btn--primary" id="emailModalSend">שלח מייל</button>
-                </div>
-            </div>
-        </div>
     </div>
 
-    <!-- Sync Updates Modal -->
-    <div id="syncModal" class="sync-modal">
+    <!-- Sync Modal -->
+    <div id="syncModal" class="sync-modal" style="display:none;">
         <div class="sync-modal-content">
             <div class="sync-modal-header">
                 <h3 id="syncModalTitle" class="sync-modal-title">עדכונים ממתינים</h3>
                 <button class="sync-modal-close" id="syncModalClose">&times;</button>
             </div>
-            <div id="syncModalBody" class="sync-modal-body">
-                <div class="sync-loading">
-                    <div class="spinner"></div>
-                    <p>טוען עדכונים...</p>
-                </div>
-            </div>
+            <div id="syncModalBody" class="sync-modal-body"></div>
         </div>
     </div>
 
-    <!-- Task Input Modal -->
-    <div id="taskModal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="taskModalTitle">הוסף משימה חדשה</h3>
-                <button class="modal-close" onclick="closeTaskModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <form id="taskForm">
-                    <div class="form-group">
-                        <label for="taskTitle">כותרת המשימה:</label>
-                        <input type="text" id="taskTitle" name="title" required placeholder="למשל: הגשת עבודה סמסטריאלית">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="taskDescription">תיאור מפורט:</label>
-                        <textarea id="taskDescription" name="description" rows="4" placeholder="פרטים נוספים על המשימה..."></textarea>
-                    </div>
-                    
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="taskDueDate">תאריך יעד:</label>
-                            <input type="date" id="taskDueDate" name="due_date">
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="taskPriority">דחיפות:</label>
-                            <select id="taskPriority" name="priority">
-                                <option value="low">נמוכה</option>
-                                <option value="medium" selected>בינונית</option>
-                                <option value="high">גבוהה</option>
-                                <option value="urgent">דחוף</option>
-                            </select>
-                        </div>
-                    </div>
-                    
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="taskStatus">סטטוס:</label>
-                            <select id="taskStatus" name="status">
-                                <option value="pending">ממתין</option>
-                                <option value="in_progress">בביצוע</option>
-                                <option value="waiting_response">ממתין לתגובה</option>
-                                <option value="completed">הושלם</option>
-                            </select>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="taskClient">לקוח/גורם:</label>
-                            <input type="text" id="taskClient" name="client" placeholder="שם הלקוח או הגורם">
-                        </div>
-                    </div>
-                    
-                    <!-- Fields specific to task type -->
-                    <div id="academicFields" style="display: none;">
-                        <div class="form-group">
-                            <label for="taskCourse">קורס/מקצוע:</label>
-                            <input type="text" id="taskCourse" name="course" placeholder="שם הקורס">
-                        </div>
-                    </div>
-                    
-                    <div id="bureaucracyFields" style="display: none;">
-                        <div class="form-group">
-                            <label for="taskAuthority">רשות:</label>
-                            <input type="text" id="taskAuthority" name="authority" placeholder="למשל: משרד הפנים, בינלאומי">
-                        </div>
-                    </div>
-                    
-                    <div id="debtsFields" style="display: none;">
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="taskAmount">סכום:</label>
-                                <input type="number" id="taskAmount" name="amount" step="0.01" placeholder="0.00">
-                            </div>
-                            <div class="form-group">
-                                <label for="taskCurrency">מטבע:</label>
-                                <select id="taskCurrency" name="currency">
-                                    <option value="EUR">יורו (EUR)</option>
-                                    <option value="ILS">שקל (ILS)</option>
-                                    <option value="USD">דולר (USD)</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label for="taskNotes">הערות:</label>
-                        <textarea id="taskNotes" name="notes" rows="3" placeholder="הערות נוספות..."></textarea>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn--secondary" onclick="closeTaskModal()">ביטול</button>
-                <button type="button" class="btn btn--primary" onclick="saveTask()">שמור משימה</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Gmail Sync Approval Modal -->
-    <div id="gmailSyncModal" class="modal" style="display: none;">
-        <div class="modal-content sync-approval-modal">
-            <div class="modal-header">
-                <h3>🤖 AI מצא עדכונים חדשים במיילים</h3>
-                <button class="modal-close" onclick="closeGmailSyncModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div id="foundEmailsContainer">
-                    <!-- Dynamic content will be added here -->
-                </div>
-                <div class="sync-options">
-                    <h4>⚙️ הגדרות סנכרון:</h4>
-                    <div class="sync-settings">
-                        <div class="setting-group">
-                            <label>
-                                <input type="checkbox" id="autoCreateTasks" checked>
-                                צור משימות אוטומטית ממיילים חשובים
-                            </label>
-                        </div>
-                        <div class="setting-group">
-                            <label>
-                                <input type="checkbox" id="smartFilter" checked>
-                                פלטר חכם - רק מיילים רלוונטיים
-                            </label>
-                        </div>
-                        <div class="setting-group">
-                            <label for="syncTimeRange">טווח זמן לסנכרון:</label>
-                            <select id="syncTimeRange">
-                                <option value="1">יום אחד אחרון</option>
-                                <option value="3" selected>3 ימים אחרונים</option>
+    <!-- Scripts at the end -->
+    <script src="app.js?v=20250926-3"></script>
+</body>
+</html>
                                 <option value="7">שבוע אחרון</option>
                                 <option value="30">חודש אחרון</option>
                             </select>

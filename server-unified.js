@@ -438,55 +438,43 @@ app.get('/api/gmail/status', (req, res) => {
 app.post('/api/gmail/sync', async (req, res) => {
     console.log('📧 Gmail sync requested...');
     
-    // Simulate email processing
     try {
-        // For now, we'll simulate finding some emails
-        const mockEmails = [
-            {
-                id: 'email-1',
-                subject: 'PAIR Finance - Urgent Payment Required',
-                from: 'collections@pairfinance.com',
-                date: new Date().toISOString(),
-                snippet: 'נדרש תשלום דחוף לחוב...',
-                priority: 'high'
-            },
-            {
-                id: 'email-2', 
-                subject: 'TK Health Insurance - Documents Required',
-                from: 'service@tk.de',
-                date: new Date().toISOString(),
-                snippet: 'נדרשים מסמכים נוספים...',
-                priority: 'medium'
-            }
-        ];
-        
-        // Add to app data
+        if (!gmailService) {
+            return res.status(503).json({ success: false, error: 'gmail_disabled' });
+        }
+
+        if (!gmailService.hasValidTokens()) {
+            return res.status(401).json({ success: false, auth_required: true, error: 'auth_required' });
+        }
+
+        const emails = await gmailService.listRecentEmails(20);
+
         if (!appData.emails) appData.emails = [];
-        
         let newCount = 0;
-        mockEmails.forEach(email => {
+
+        emails.forEach(email => {
             const exists = appData.emails.find(e => e.id === email.id);
             if (!exists) {
-                appData.emails.push(email);
+                appData.emails.push({
+                    id: email.id,
+                    subject: email.subject,
+                    from: email.from,
+                    date: email.date,
+                    snippet: email.snippet,
+                    priority: 'medium'
+                });
                 newCount++;
             }
         });
-        
-        console.log(`📧 Gmail sync: ${newCount} new emails found`);
-        
-        res.json({
-            success: true,
-            ingested: newCount,
-            total: appData.emails.length,
-            message: newCount > 0 ? `נמצאו ${newCount} מיילים חדשים` : 'לא נמצאו מיילים חדשים'
-        });
-        
+
+        console.log(`📧 Gmail sync: ${newCount} new emails ingested (total: ${appData.emails.length})`);
+        return res.json({ success: true, ingested: newCount, total: appData.emails.length, linked: 0 });
     } catch (error) {
+        if (String(error?.message || '').includes('AUTH_REQUIRED')) {
+            return res.status(401).json({ success: false, auth_required: true, error: 'auth_required' });
+        }
         console.error('Gmail sync error:', error);
-        res.status(500).json({
-            success: false,
-            error: 'שגיאה בסנכרון מיילים: ' + error.message
-        });
+        return res.status(500).json({ success: false, error: 'שגיאה בסנכרון מיילים: ' + error.message });
     }
 });
 
@@ -740,6 +728,13 @@ app.get('/auth/google/callback', async (req, res) => {
         return res.redirect('/?gmail=error');
     }
     try {
+        // If Google returned an error (e.g., access_denied, redirect_uri_mismatch), surface it to the UI
+        const oauthError = req.query.error;
+        if (oauthError) {
+            const reason = encodeURIComponent(String(oauthError));
+            return res.redirect(`/?gmail=error&reason=${reason}`);
+        }
+
         const code = req.query.code;
         if (!code) {
             return res.redirect('/?gmail=missing_code');
@@ -748,7 +743,8 @@ app.get('/auth/google/callback', async (req, res) => {
         return res.redirect(`/?gmail=connected&connected=${encodeURIComponent(email || '')}`);
     } catch (error) {
         console.error('Gmail OAuth error:', error);
-        return res.redirect('/?gmail=error');
+        const reason = error?.message ? encodeURIComponent(error.message) : 'unknown';
+        return res.redirect(`/?gmail=error&reason=${reason}`);
     }
 });
 

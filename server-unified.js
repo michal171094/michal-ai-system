@@ -4,6 +4,7 @@ const cors = require('cors');
 const axios = require('axios');
 const multer = require('multer');
 const DriveService = require('./services/DriveService');
+const GmailService = require('./services/GmailService');
 require('dotenv').config();
 
 const app = express();
@@ -24,6 +25,14 @@ const upload = multer({
 
 // Initialize Drive service
 const driveService = new DriveService();
+// Initialize Gmail service (if configured)
+let gmailService = null;
+try {
+    gmailService = new GmailService();
+    console.log('📧 GmailService initialized');
+} catch (e) {
+    console.warn('⚠️ GmailService not initialized:', e.message);
+}
 
 // Serve static files (your HTML, CSS, JS)
 app.use(express.static('.'));
@@ -710,33 +719,80 @@ app.get('/api/drive/status', (req, res) => {
     });
 });
 
-// Gmail auth URL (mock)
+// Gmail auth URL
 app.get('/api/gmail/auth-url', (req, res) => {
-    if (!process.env.GOOGLE_CLIENT_ID) {
-        return res.status(503).json({
-            error: 'Gmail OAuth לא מוגדר - נדרש GOOGLE_CLIENT_ID'
-        });
+    if (!gmailService) {
+        return res.status(503).json({ error: 'Gmail service disabled' });
     }
-    
-    // Mock auth URL
-    const authUrl = `https://accounts.google.com/oauth/authorize?client_id=${process.env.GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(process.env.GOOGLE_REDIRECT_URI || 'https://michal-ai-system.onrender.com/auth/google/callback')}&scope=https://www.googleapis.com/auth/gmail.readonly&response_type=code`;
-    
-    res.json({ url: authUrl });
+    try {
+        const url = gmailService.getAuthUrl();
+        // Ensure we use v2 endpoint; googleapis does this internally
+        return res.json({ url });
+    } catch (err) {
+        console.error('Gmail auth-url error:', err);
+        return res.status(500).json({ error: 'failed_to_create_auth_url' });
+    }
+});
+
+// Gmail OAuth callback
+app.get('/auth/google/callback', async (req, res) => {
+    if (!gmailService) {
+        return res.redirect('/?gmail=error');
+    }
+    try {
+        const code = req.query.code;
+        if (!code) {
+            return res.redirect('/?gmail=missing_code');
+        }
+        const { email } = await gmailService.exchangeCodeForTokens(code);
+        return res.redirect(`/?gmail=connected&connected=${encodeURIComponent(email || '')}`);
+    } catch (error) {
+        console.error('Gmail OAuth error:', error);
+        return res.redirect('/?gmail=error');
+    }
+});
+
+// Gmail accounts API
+app.get('/api/gmail/accounts', (req, res) => {
+    if (!gmailService) {
+        return res.json({ success: true, accounts: [], activeEmail: null, configured: false });
+    }
+    return res.json({ success: true, ...gmailService.listAccounts() });
+});
+
+app.post('/api/gmail/accounts/activate', (req, res) => {
+    if (!gmailService) {
+        return res.status(503).json({ success: false, error: 'gmail_disabled' });
+    }
+    try {
+        const email = req.body?.email;
+        if (!email) return res.status(400).json({ success: false, error: 'missing_email' });
+        gmailService.setActiveAccount(email);
+        return res.json({ success: true });
+    } catch (e) {
+        return res.status(400).json({ success: false, error: e.message });
+    }
+});
+
+app.delete('/api/gmail/accounts/:email', (req, res) => {
+    if (!gmailService) {
+        return res.status(503).json({ success: false, error: 'gmail_disabled' });
+    }
+    const email = decodeURIComponent(req.params.email);
+    const ok = gmailService.removeAccount(email);
+    return res.json({ success: true, removed: ok });
 });
 
 // Connectors status
 app.get('/api/connectors/status', (req, res) => {
-    res.json({
-        success: true,
-        data: {
-            gmail: {
-                configured: !!process.env.GOOGLE_CLIENT_ID,
-                accounts: [],
-                activeEmail: null,
-                authenticated: false
-            }
+    const gmail = gmailService
+        ? {
+            configured: true,
+            ...gmailService.listAccounts(),
+            authenticated: gmailService.hasValidTokens()
         }
-    });
+        : { configured: false, accounts: [], activeEmail: null, authenticated: false };
+    res.json({ success: true, data: { gmail } });
 });
 
 // Serve main page

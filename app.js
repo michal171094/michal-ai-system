@@ -73,7 +73,7 @@ function switchTab(tabName) {
     // Load data for active tab
     if (tabName === 'smart-overview') {
         loadSmartOverview();
-    } else if (tabName === 'connectors') {
+    } else if (tabName === 'connectors' || tabName === 'connector-status') {
         loadConnectorsDashboard();
     }
 }
@@ -988,7 +988,7 @@ function generateAIResponse(message) {
     const lowerMessage = message.toLowerCase();
     
     if (lowerMessage.includes('דחוף') || lowerMessage.includes('היום')) {
-        return "המשימות הדחופות היום:\n• כרמית - סמינר פסיכולוגיה (דדליין היום!)\n• PAIR Finance - התנגדות (נשאר יומיים)\n• ביטוח בריאות TK - הגשת מסמכים\n\nהתחילי עם כרמית - זה הכי דחוף!";
+        return "המשימות הדחופות היום:\n• כרמית - סמינר פסיכולוגיה (דדליין היום!)\n• PAIR Finance - התנגדות (נשאר יומיים)\n• ביטוח בריאות TK - הגשת מסמכים\n\nהתחלי עם כרמית - זה הכי דחוף!";
     }
     
     if (lowerMessage.includes('pair') || lowerMessage.includes('התנגדות')) {

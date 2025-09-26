@@ -301,6 +301,204 @@ app.post('/api/chat', (req, res) => {
     });
 });
 
+// ===== TASK MANAGEMENT ENDPOINTS =====
+
+// Create new task
+app.post('/api/tasks', (req, res) => {
+    try {
+        const task = req.body;
+        task.id = Date.now() + Math.random();
+        task.created = new Date().toISOString();
+        appData.tasks.push(task);
+        
+        console.log('✅ New task created:', task.title);
+        res.json({ success: true, data: task });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Bulk task creation
+app.post('/api/tasks/bulk', (req, res) => {
+    try {
+        const { tasks } = req.body;
+        if (!Array.isArray(tasks)) {
+            return res.status(400).json({ success: false, error: 'tasks must be an array' });
+        }
+        
+        const createdTasks = [];
+        tasks.forEach(taskData => {
+            const t = { 
+                ...taskData, 
+                id: Date.now() + Math.random(),
+                created: new Date().toISOString()
+            };
+            appData.tasks.push(t);
+            createdTasks.push(t);
+        });
+        
+        console.log(`✅ Bulk created ${createdTasks.length} tasks`);
+        res.json({ 
+            success: true, 
+            created: createdTasks.length, 
+            data: createdTasks 
+        });
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
+});
+
+// Delete all tasks
+app.delete('/api/tasks', (req, res) => {
+    const deletedCount = appData.tasks.length;
+    appData.tasks = [];
+    console.log(`🗑️ Deleted ${deletedCount} tasks`);
+    res.json({ success: true, deleted: deletedCount });
+});
+
+// Create debt
+app.post('/api/debts', (req, res) => {
+    try {
+        const debt = req.body;
+        debt.id = Date.now() + Math.random();
+        debt.created = new Date().toISOString();
+        appData.debts.push(debt);
+        
+        console.log('✅ New debt created:', debt.title);
+        res.json({ success: true, data: debt });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Delete all debts
+app.delete('/api/debts', (req, res) => {
+    const deletedCount = appData.debts.length;
+    appData.debts = [];
+    console.log(`🗑️ Deleted ${deletedCount} debts`);
+    res.json({ success: true, deleted: deletedCount });
+});
+
+// Create bureaucracy item
+app.post('/api/bureaucracy', (req, res) => {
+    try {
+        const item = req.body;
+        item.id = Date.now() + Math.random();
+        item.created = new Date().toISOString();
+        appData.bureaucracy.push(item);
+        
+        console.log('✅ New bureaucracy item created:', item.title);
+        res.json({ success: true, data: item });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// Delete all bureaucracy items
+app.delete('/api/bureaucracy', (req, res) => {
+    const deletedCount = appData.bureaucracy.length;
+    appData.bureaucracy = [];
+    console.log(`🗑️ Deleted ${deletedCount} bureaucracy items`);
+    res.json({ success: true, deleted: deletedCount });
+});
+
+// ===== GMAIL ENDPOINTS =====
+
+// Gmail status
+app.get('/api/gmail/status', (req, res) => {
+    res.json({
+        configured: !!process.env.GOOGLE_CLIENT_ID,
+        authenticated: false, // Would need real OAuth flow
+        accounts: [],
+        activeEmail: null
+    });
+});
+
+// Gmail sync endpoint
+app.post('/api/gmail/sync', async (req, res) => {
+    console.log('📧 Gmail sync requested...');
+    
+    // Simulate email processing
+    try {
+        // For now, we'll simulate finding some emails
+        const mockEmails = [
+            {
+                id: 'email-1',
+                subject: 'PAIR Finance - Urgent Payment Required',
+                from: 'collections@pairfinance.com',
+                date: new Date().toISOString(),
+                snippet: 'נדרש תשלום דחוף לחוב...',
+                priority: 'high'
+            },
+            {
+                id: 'email-2', 
+                subject: 'TK Health Insurance - Documents Required',
+                from: 'service@tk.de',
+                date: new Date().toISOString(),
+                snippet: 'נדרשים מסמכים נוספים...',
+                priority: 'medium'
+            }
+        ];
+        
+        // Add to app data
+        if (!appData.emails) appData.emails = [];
+        
+        let newCount = 0;
+        mockEmails.forEach(email => {
+            const exists = appData.emails.find(e => e.id === email.id);
+            if (!exists) {
+                appData.emails.push(email);
+                newCount++;
+            }
+        });
+        
+        console.log(`📧 Gmail sync: ${newCount} new emails found`);
+        
+        res.json({
+            success: true,
+            ingested: newCount,
+            total: appData.emails.length,
+            message: newCount > 0 ? `נמצאו ${newCount} מיילים חדשים` : 'לא נמצאו מיילים חדשים'
+        });
+        
+    } catch (error) {
+        console.error('Gmail sync error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'שגיאה בסנכרון מיילים: ' + error.message
+        });
+    }
+});
+
+// Gmail auth URL (mock)
+app.get('/api/gmail/auth-url', (req, res) => {
+    if (!process.env.GOOGLE_CLIENT_ID) {
+        return res.status(503).json({
+            error: 'Gmail OAuth לא מוגדר - נדרש GOOGLE_CLIENT_ID'
+        });
+    }
+    
+    // Mock auth URL
+    const authUrl = `https://accounts.google.com/oauth/authorize?client_id=${process.env.GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(process.env.GOOGLE_REDIRECT_URI || 'https://michal-ai-system.onrender.com/auth/google/callback')}&scope=https://www.googleapis.com/auth/gmail.readonly&response_type=code`;
+    
+    res.json({ url: authUrl });
+});
+
+// Connectors status
+app.get('/api/connectors/status', (req, res) => {
+    res.json({
+        success: true,
+        data: {
+            gmail: {
+                configured: !!process.env.GOOGLE_CLIENT_ID,
+                accounts: [],
+                activeEmail: null,
+                authenticated: false
+            }
+        }
+    });
+});
+
 // Serve main page
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));

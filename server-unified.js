@@ -105,6 +105,34 @@ function buildSmartOverviewPayload(appData) {
 // ---------- Generic CRUD (simplified) ----------
 app.get('/api/tasks', (req,res)=> res.json({ success:true, data: appData.tasks }));
 app.post('/api/tasks', (req,res)=> { const t = req.body; t.id = Date.now(); appData.tasks.push(t); saveAppData(); AgentCore.memory.addEvent('task_created', {id:t.id}); res.json({success:true, data:t}); });
+
+// Bulk task creation endpoint
+app.post('/api/tasks/bulk', (req, res) => {
+  try {
+    const { tasks } = req.body;
+    if (!Array.isArray(tasks)) {
+      return res.status(400).json({ success: false, error: 'tasks must be an array' });
+    }
+    
+    const createdTasks = [];
+    tasks.forEach(taskData => {
+      const t = { ...taskData, id: Date.now() + Math.random() }; // Unique IDs
+      appData.tasks.push(t);
+      createdTasks.push(t);
+      AgentCore.memory.addEvent('task_created', { id: t.id, bulk: true });
+    });
+    
+    saveAppData();
+    res.json({ 
+      success: true, 
+      created: createdTasks.length, 
+      data: createdTasks 
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.put('/api/tasks/:id', (req,res)=> {
   const id = Number(req.params.id);
   const idx = appData.tasks.findIndex(t=> Number(t.id) === id);

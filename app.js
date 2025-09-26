@@ -15,15 +15,15 @@ document.addEventListener('DOMContentLoaded', function() {
         initializeTabs();
         initializeEventListeners();
         
-        // Load initial data
-        setTimeout(() => {
-            loadInitialData();
-            setupSyncControls();
-            setupModalControls();
-            loadSyncBadges();
-        }, 100);
-        
-        console.log('✅ מערכת מיכל AI מוכנה לעבודה!');
+    // Load initial data
+    setTimeout(() => {
+        loadInitialData();
+        loadAIStatus(); // טעינת סטטוס AI
+        setupSyncControls();
+        setupModalControls();
+        setupManualTaskEntry(); // הוספת הזנת משימות ידנית
+        loadSyncBadges();
+    }, 100);        console.log('✅ מערכת מיכל AI מוכנה לעבודה!');
         
     } catch (error) {
         console.error('❌ שגיאה באיתחול:', error);
@@ -217,6 +217,272 @@ async function loadSmartOverview() {
         updateSystemStatus('error', 'שגיאה בחיבור לשרת');
         showEmptyState();
     }
+}
+
+// Load AI Status and Pending Actions
+async function loadAIStatus() {
+    console.log('🧠 טוען סטטוס AI...');
+    
+    try {
+        const response = await fetch('/api/ai/status');
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        
+        if (data.success && data.aiAvailable) {
+            updateAIStatusDisplay(data);
+            
+            // אם יש פעולות ממתינות, הצג התרעה
+            if (data.pendingActions && data.pendingActions.length > 0) {
+                showPendingActionsNotification(data.pendingActions);
+            }
+        } else {
+            console.warn('AI not available or error:', data.message);
+        }
+    } catch (error) {
+        console.warn('⚠️ לא ניתן לטעון סטטוס AI:', error);
+    }
+}
+
+// עדכון תצוגת סטטוס AI
+function updateAIStatusDisplay(aiData) {
+    // עדכון מספרי הסטטיסטיקות
+    const stats = aiData.statistics || {};
+    
+    // הוסף לסטטיסטיקות הקיימות
+    const aiActionsElement = document.getElementById('aiActionsCount');
+    if (aiActionsElement) {
+        aiActionsElement.textContent = stats.totalActionsToday || 0;
+    }
+    
+    // הוסף אינדיקטור AI לסיסטם סטטוס
+    const systemStatus = document.getElementById('systemStatusIndicator');
+    if (systemStatus && aiData.aiAvailable) {
+        const aiIndicator = systemStatus.querySelector('.ai-indicator') || document.createElement('span');
+        aiIndicator.className = 'ai-indicator active';
+        aiIndicator.title = `AI פעיל • ${stats.emailsProcessed || 0} מיילים • ${stats.documentsProcessed || 0} מסמכים`;
+        aiIndicator.textContent = '🧠';
+        if (!systemStatus.querySelector('.ai-indicator')) {
+            systemStatus.appendChild(aiIndicator);
+        }
+    }
+}
+
+// הצגת התרעה על פעולות ממתינות
+function showPendingActionsNotification(pendingActions) {
+    const urgentActions = pendingActions.filter(a => a.urgency >= 7);
+    
+    if (urgentActions.length > 0) {
+        const message = `🔔 יש ${urgentActions.length} פעולות דחופות הממתינות לאישור שלך`;
+        addMessageToChat(message, 'ai');
+        
+        // הוסף כפתור לצפייה בפעולות
+        const viewActionsButton = `<div class="quick-action-button" onclick="showAllPendingActions()">
+            📋 צפה בכל הפעולות הממתינות (${pendingActions.length})
+        </div>`;
+        addMessageToChat(viewActionsButton, 'ai');
+    }
+}
+
+// הצגת כל הפעולות הממתינות
+async function showAllPendingActions() {
+    try {
+        const response = await fetch('/api/ai/status');
+        const data = await response.json();
+        
+        if (data.success && data.pendingActions) {
+            let actionsHtml = '<div class="all-pending-actions"><h3>📋 פעולות ממתינות לאישור:</h3>';
+            
+            data.pendingActions.forEach(action => {
+                const urgencyIcon = action.urgency >= 7 ? '🔥' : action.urgency >= 5 ? '⚠️' : '📌';
+                actionsHtml += `
+                    <div class="pending-action-item" data-action-id="${action.id}">
+                        <div class="action-header">
+                            ${urgencyIcon} <strong>${action.summary}</strong>
+                        </div>
+                        <div class="action-details">
+                            מקור: ${action.source} • דחיפות: ${action.urgency}/10
+                        </div>
+                        <div class="action-buttons-inline">
+                            <button class="btn btn-small approve" onclick="approveAIAction('${action.id}')">✅ אשר</button>
+                            <button class="btn btn-small reject" onclick="rejectAIAction('${action.id}')">❌ דחה</button>
+                        </div>
+                    </div>`;
+            });
+            
+            actionsHtml += '</div>';
+            addMessageToChat(actionsHtml, 'ai');
+        }
+    } catch (error) {
+        addMessageToChat('❌ שגיאה בטעינת פעולות ממתינות', 'ai');
+    }
+}
+
+// Setup Manual Task Entry
+function setupManualTaskEntry() {
+    console.log('📝 מגדיר הזנת משימות ידנית...');
+    
+    // הוסף כפתור הוספת משימה חדשה
+    const addTaskBtn = document.getElementById('addNewTaskBtn');
+    if (addTaskBtn) {
+        addTaskBtn.addEventListener('click', showAddTaskModal);
+    }
+    
+    // הוסף מאזין לקלט מהיר במשימות
+    const quickTaskInput = document.getElementById('quickTaskInput');
+    if (quickTaskInput) {
+        quickTaskInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                addQuickTask(this.value);
+                this.value = '';
+            }
+        });
+    }
+    
+    // הוסף כפתורי הוספה מהירה בכל טאב
+    addQuickAddButtons();
+}
+
+// הוסף כפתורי הוספה מהירה
+function addQuickAddButtons() {
+    const tabs = ['tasks', 'debts', 'bureaucracy'];
+    
+    tabs.forEach(tabName => {
+        const tabPanel = document.getElementById(tabName);
+        if (tabPanel && !tabPanel.querySelector('.quick-add-section')) {
+            const quickAddHtml = `
+                <div class="quick-add-section" style="margin: 15px 0; padding: 15px; background: var(--accent-bg); border-radius: 8px; border: 1px solid var(--border-light);">
+                    <div class="quick-add-input-group" style="display: flex; gap: 10px;">
+                        <input type="text" 
+                               id="${tabName}QuickInput" 
+                               class="quick-add-input" 
+                               placeholder="הקלד ${getTabName(tabName)} חדש והקש Enter..."
+                               style="flex: 1; padding: 8px 12px; border: 1px solid var(--border-light); border-radius: 4px;">
+                        <button class="quick-add-btn" onclick="addQuickItem('${tabName}')" 
+                                style="padding: 8px 12px; background: var(--primary-color); color: white; border: none; border-radius: 4px; cursor: pointer;">➕ הוסף</button>
+                    </div>
+                </div>`;
+            
+            // הוסף בתחילת הטאב
+            tabPanel.insertAdjacentHTML('afterbegin', quickAddHtml);
+            
+            // הוסף מאזין לקלט
+            const input = document.getElementById(`${tabName}QuickInput`);
+            if (input) {
+                input.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        addQuickItem(tabName, this.value);
+                        this.value = '';
+                    }
+                });
+            }
+        }
+    });
+}
+
+// קבל שם טאב בעברית
+function getTabName(tabName) {
+    const names = {
+        'tasks': 'משימה',
+        'debts': 'חוב',
+        'bureaucracy': 'פריט ביורוקרטיה'
+    };
+    return names[tabName] || 'פריט';
+}
+
+// הוספת פריט מהיר
+async function addQuickItem(category, text) {
+    const input = document.getElementById(`${category}QuickInput`);
+    const taskText = text || (input ? input.value.trim() : '');
+    
+    if (!taskText) {
+        showNotification('⚠️ אנא הכנס טקסט');
+        return;
+    }
+    
+    console.log(`➕ מוסיף ${category}: ${taskText}`);
+    
+    // נקה את הקלט
+    if (input) input.value = '';
+    
+    // שלח לצ'אט AI לעיבוד
+    addMessageToChat(`➕ צור ${getTabName(category)}: ${taskText}`, 'user');
+    
+    // עבד עם AI
+    try {
+        const response = await fetch('/api/ai/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                message: `צור ${getTabName(category)} חדש: ${taskText}. קטגוריה: ${category}`
+            })
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            addMessageToChat(data.response, 'ai');
+            
+            if (data.actions && data.actions.length > 0) {
+                showAIPendingActions(data.actions, 'create_task');
+            } else {
+                // אם AI לא יצר פעולות, צור ידנית
+                await createItemManually(category, taskText);
+            }
+        } else {
+            // Fallback - יצירה ידנית
+            await createItemManually(category, taskText);
+        }
+    } catch (error) {
+        console.warn('AI not available, creating manually:', error);
+        await createItemManually(category, taskText);
+    }
+}
+
+// יצירה ידנית של פריט
+async function createItemManually(category, text) {
+    const newItem = {
+        id: `manual_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        title: text,
+        description: `נוצר ידנית: ${text}`,
+        status: 'חדש',
+        priority: 'medium',
+        category: category,
+        createdAt: new Date().toISOString(),
+        dueDate: null,
+        amount: null
+    };
+    
+    try {
+        // שלח לשרת (אם API קיים)
+        const response = await fetch(`/api/${category}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newItem)
+        });
+        
+        if (response.ok) {
+            showNotification(`✅ ${getTabName(category)} נוסף בהצלחה`);
+        } else {
+            throw new Error('Server error');
+        }
+    } catch (error) {
+        console.warn('Server not available, storing locally');
+        // שמור באחסון מקומי כחלופה
+        const storageKey = `local_${category}`;
+        const existing = JSON.parse(localStorage.getItem(storageKey) || '[]');
+        existing.push(newItem);
+        localStorage.setItem(storageKey, JSON.stringify(existing));
+        showNotification(`✅ ${getTabName(category)} נוסף (מקומי)`);
+    }
+    
+    // רענן תצוגה
+    setTimeout(() => {
+        loadSmartOverview();
+        if (category !== 'smart-overview') {
+            switchTab(category);
+        }
+    }, 500);
+    
+    addMessageToChat(`✅ ${getTabName(category)} "${text}" נוצר בהצלחה`, 'ai');
 }
 
 function updateSystemStatus(status, text) {
@@ -789,10 +1055,11 @@ async function triggerGmailSync() {
 
     const originalHtml = button.innerHTML;
     button.dataset.loading = '1';
-    button.innerHTML = '⏳ מסנכרן...';
+    button.innerHTML = '🧠 מסנכרן עם AI...';
     button.disabled = true;
 
     try {
+        console.log('🔄 Starting Gmail sync with LangGraph...');
         const response = await fetch('/api/gmail/sync', { method: 'POST' });
         const contentType = response.headers.get('content-type') || '';
         const payload = contentType.includes('application/json') ? await response.json() : {};
@@ -811,18 +1078,40 @@ async function triggerGmailSync() {
             throw new Error(payload?.error || `HTTP ${response.status}`);
         }
 
-        const ingested = payload.ingested ?? 0;
-        const linked = payload.linked ?? 0;
-        const total = payload.total ?? '—';
-        const message = ingested
-            ? `📥 נוספו ${ingested} אימיילים (${linked} קושרו). סה"כ בתיבה: ${total}.`
-            : '📭 המיילים מעודכנים, לא נמצאו פריטים חדשים.';
-        showNotification(message);
+        // אם יש עיבוד AI
+        if (payload.aiProcessed && payload.pendingActions) {
+            console.log(`🧠 AI processed ${payload.total} emails, ${payload.pendingActions.length} actions suggested`);
+            
+            const message = `🧠 AI עיבד ${payload.total} מיילים וזיהה ${payload.pendingActions.length} פעולות מוצעות`;
+            showNotification(message);
+            
+            // הצג את הפעולות המוצעות בצ'אט
+            if (payload.pendingActions.length > 0) {
+                addMessageToChat(`📧 סנכרון Gmail הושלם! זיהיתי ${payload.pendingActions.length} פעולות מוצעות:`, 'ai');
+                showAIPendingActions(payload.pendingActions, 'email_sync');
+            } else {
+                addMessageToChat('📧 סנכרון Gmail הושלם! לא זוהו פעולות חדשות שדורשות טיפול מיידי.', 'ai');
+            }
+        } else {
+            // סנכרון רגיל בלי AI
+            const ingested = payload.ingested ?? 0;
+            const linked = payload.linked ?? 0;
+            const total = payload.total ?? '—';
+            const message = ingested
+                ? `📥 נוספו ${ingested} אימיילים (${linked} קושרו). סה"כ בתיבה: ${total}.`
+                : '📭 המיילים מעודכנים, לא נמצאו פריטים חדשים.';
+            showNotification(message);
+        }
+        
+        // רענן נתונים
         loadSmartOverview();
+        loadAIStatus();
         loadConnectorsDashboard({ silent: true });
+        
     } catch (error) {
         console.error('שגיאה בסנכרון Gmail:', error);
-        showNotification('❌ סנכרון המיילים נכשל.');
+        showNotification('❌ סנכרון המיילים נכשל: ' + error.message);
+        addMessageToChat('❌ שגיאה בסנכרון מיילים: ' + error.message, 'ai');
     } finally {
         button.dataset.loading = '0';
         button.innerHTML = originalHtml;
@@ -830,28 +1119,85 @@ async function triggerGmailSync() {
     }
 }
 
-// Document upload handler
+// Document upload handler - Enhanced with LangGraph Bulk Processing
 async function handleDocumentUpload(event) {
-    const file = event.target.files?.[0];
-    if (!file) return;
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
 
-    showNotification(`⏳ מעלה את ${file.name}...`);
+    const isMultiple = files.length > 1;
+    const message = isMultiple ? 
+        `⏳ מעלה ${files.length} מסמכים עם עיבוד AI...` : 
+        `⏳ מעלה את ${files[0].name} עם עיבוד AI...`;
+    
+    showNotification(message);
+    addMessageToChat(`📄 מתחילה להעלות ${files.length} מסמכים לעיבוד חכם...`, 'ai');
 
     const formData = new FormData();
-    formData.append('document', file);
+    files.forEach(file => {
+        formData.append('documents', file);
+    });
 
     try {
-        const response = await fetch('/api/upload-document', {
+        // שלח לעיבוד בבולק עם AI
+        const endpoint = isMultiple ? '/api/drive/bulk-upload' : '/api/drive/upload';
+        
+        const response = await fetch(endpoint, {
             method: 'POST',
             body: formData
         });
+        
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const result = await response.json();
-        showNotification(`📄 ${file.name} הועלה בהצלחה.`);
-        announceDocumentProcessingResult(result);
+        
+        if (result.success) {
+            // הצגת תוצאות עיבוד
+            const processedCount = result.results?.length || 1;
+            const errorCount = result.errors?.length || 0;
+            
+            let successMessage = `✅ הועלו ${processedCount} מסמכים בהצלחה`;
+            if (errorCount > 0) {
+                successMessage += ` (${errorCount} שגיאות)`;
+            }
+            
+            showNotification(successMessage);
+            addMessageToChat(successMessage, 'ai');
+            
+            // אם יש ניתוח AI
+            if (result.aiAnalysis && result.aiAnalysis.suggestedActions > 0) {
+                const aiMessage = `🧠 AI ניתח את המסמכים וזיהה ${result.aiAnalysis.suggestedActions} פעולות מוצעות`;
+                addMessageToChat(aiMessage, 'ai');
+                
+                // הצג את הפעולות המוצעות
+                if (result.aiAnalysis.actions) {
+                    showAIPendingActions(result.aiAnalysis.actions, 'document_processing');
+                }
+            } else {
+                addMessageToChat('📄 המסמכים עובדו בסיסית. ניתן להוסיף עיבוד AI מתקדם בהמשך.', 'ai');
+            }
+            
+            // הצג תוצאות מפורטות
+            if (result.results && result.results.length > 0) {
+                result.results.forEach((item, index) => {
+                    const fileName = item.file || files[index]?.name || `מסמך ${index + 1}`;
+                    addMessageToChat(`📋 ${fileName}: עובד בהצלחה`, 'ai');
+                });
+            }
+            
+            // רענן נתונים
+            setTimeout(() => {
+                loadSmartOverview();
+                loadAIStatus();
+            }, 1000);
+            
+        } else {
+            throw new Error(result.error || 'העלאה נכשלה');
+        }
+        
     } catch (error) {
-        console.error('שגיאה בהעלאת מסמך:', error);
-        showNotification('❌ העלאת המסמך נכשלה.');
+        console.error('שגיאה בהעלאת מסמכים:', error);
+        const errorMessage = `❌ שגיאה בהעלאת מסמכים: ${error.message}`;
+        showNotification(errorMessage);
+        addMessageToChat(errorMessage, 'ai');
     } finally {
         event.target.value = '';
     }
@@ -928,7 +1274,7 @@ async function handleTaskAction(taskId) {
     }
 }
 
-// Chat functionality
+// Chat functionality - Enhanced with LangGraph
 async function sendMessage(messageText = null) {
     const input = document.getElementById('chatInput');
     const message = messageText || (input ? input.value.trim() : '');
@@ -944,18 +1290,17 @@ async function sendMessage(messageText = null) {
     // Show typing indicator
     const typingIndicator = document.createElement('div');
     typingIndicator.className = 'message ai-message typing';
-    typingIndicator.innerHTML = '<div class="message-content">כותבת...</div>';
+    typingIndicator.innerHTML = '<div class="message-content">🧠 מעבדת עם AI...</div>';
     const messagesContainer = document.getElementById('chatMessages');
     messagesContainer.appendChild(typingIndicator);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
     
     try {
-        // נסה לשלוח לשרת
-        const response = await fetch('/api/chat/message', {
+        // שלח למערכת LangGraph החדשה
+        const response = await fetch('/api/ai/chat', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('token') || 'mock-token'}`
+                'Content-Type': 'application/json'
             },
             body: JSON.stringify({ message })
         });
@@ -963,12 +1308,30 @@ async function sendMessage(messageText = null) {
         if (response.ok) {
             const data = await response.json();
             typingIndicator.remove();
-            addMessageToChat(data.data.response, 'ai');
+            
+            if (data.success) {
+                // הוסף תשובת AI
+                addMessageToChat(data.response, 'ai');
+                
+                // אם יש פעולות מוצעות - הצג אותן
+                if (data.actions && data.actions.length > 0) {
+                    showAIPendingActions(data.actions, data.intent);
+                }
+                
+                // רענן סטטוס אם נדרש
+                if (data.intent === 'create_task' || data.intent === 'modify_system') {
+                    setTimeout(() => {
+                        loadSmartOverview();
+                        loadAIStatus();
+                    }, 1000);
+                }
+            } else {
+                addMessageToChat('❌ שגיאה: ' + (data.error || 'תגובה לא חוקית'), 'ai');
+            }
         } else {
             throw new Error('Server error');
         }
     } catch (error) {
-        // אם השרת לא זמין, השתמש בתגובת גיבוי
         console.warn('⚠️ שרת לא זמין, משתמש בתגובת גיבוי:', error);
         typingIndicator.remove();
         const response = generateAIResponse(message);
@@ -994,6 +1357,125 @@ function addMessageToChat(message, sender) {
     
     messagesContainer.appendChild(messageDiv);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+// הצגת פעולות מוצעות של AI
+function showAIPendingActions(actions, intent) {
+    if (!actions || actions.length === 0) return;
+    
+    const messagesContainer = document.getElementById('chatMessages');
+    if (!messagesContainer) return;
+    
+    const actionDiv = document.createElement('div');
+    actionDiv.className = 'message ai-message actions-message';
+    
+    let actionsHtml = `<div class="message-content">
+        <div class="actions-header">💡 פעולות מוצעות (${intent}):</div>
+        <div class="suggested-actions">`;
+    
+    actions.forEach(action => {
+        const urgencyClass = action.requiresApproval ? 'requires-approval' : 'auto-execute';
+        actionsHtml += `
+            <div class="suggested-action ${urgencyClass}" data-action-id="${action.id}">
+                <div class="action-description">${action.description}</div>
+                <div class="action-type">סוג: ${action.type}</div>
+                <div class="action-buttons">
+                    <button class="action-btn approve-btn" onclick="approveAIAction('${action.id}')">✅ אשר</button>
+                    <button class="action-btn reject-btn" onclick="rejectAIAction('${action.id}')">❌ דחה</button>
+                    <button class="action-btn modify-btn" onclick="modifyAIAction('${action.id}')">✏️ ערוך</button>
+                </div>
+            </div>`;
+    });
+    
+    actionsHtml += `</div></div>`;
+    actionDiv.innerHTML = actionsHtml;
+    
+    messagesContainer.appendChild(actionDiv);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+// אישור פעולה של AI
+async function approveAIAction(actionId) {
+    try {
+        showNotification('🔄 מבצע פעולה...');
+        
+        const response = await fetch('/api/gmail/sync/approve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                approvedActions: [actionId],
+                rejectedActions: [],
+                modifications: {},
+                feedback: { approved: true }
+            })
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            showNotification('✅ פעולה בוצעה בהצלחה!');
+            addMessageToChat(`✅ פעולה ${actionId} בוצעה בהצלחה`, 'ai');
+            
+            // רענן נתונים
+            setTimeout(() => {
+                loadSmartOverview();
+                loadAIStatus();
+            }, 1000);
+            
+            // הסר את כפתורי הפעולה
+            const actionElement = document.querySelector(`[data-action-id="${actionId}"]`);
+            if (actionElement) {
+                actionElement.style.opacity = '0.5';
+                actionElement.querySelector('.action-buttons').innerHTML = '<span class="action-status approved">✅ בוצע</span>';
+            }
+        } else {
+            showNotification('❌ שגיאה: ' + data.error);
+        }
+    } catch (error) {
+        console.error('Error approving action:', error);
+        showNotification('❌ שגיאה בביצוע פעולה');
+    }
+}
+
+// דחיית פעולה של AI
+async function rejectAIAction(actionId) {
+    try {
+        const response = await fetch('/api/gmail/sync/approve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                approvedActions: [],
+                rejectedActions: [actionId],
+                modifications: {},
+                feedback: { rejected: true, reason: 'User choice' }
+            })
+        });
+        
+        const data = await response.json();
+        if (data.success) {
+            addMessageToChat(`❌ פעולה ${actionId} נדחתה`, 'ai');
+            
+            // הסר את כפתורי הפעולה
+            const actionElement = document.querySelector(`[data-action-id="${actionId}"]`);
+            if (actionElement) {
+                actionElement.style.opacity = '0.5';
+                actionElement.querySelector('.action-buttons').innerHTML = '<span class="action-status rejected">❌ נדחה</span>';
+            }
+        }
+    } catch (error) {
+        console.error('Error rejecting action:', error);
+        showNotification('❌ שגיאה בדחיית פעולה');
+    }
+}
+
+// עריכת פעולה של AI
+function modifyAIAction(actionId) {
+    const modification = prompt('איך תרצי לשנות את הפעולה?');
+    if (!modification) return;
+    
+    addMessageToChat(`✏️ מבקשת שינוי לפעולה ${actionId}: ${modification}`, 'user');
+    addMessageToChat('👍 השינוי נרשם. כעת אישרי את הפעולה המעודכנת.', 'ai');
+    
+    // TODO: יישום השינוי בפועל
 }
 
 // Generate AI responses

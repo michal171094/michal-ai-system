@@ -194,18 +194,33 @@
                     </div>
                 </section>
 
-                <!-- Tasks Panel (placeholder) -->
+                <!-- Tasks Panel -->
                 <section id="tasks" class="tab-panel">
+                    <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h2>📝 משימות</h2>
+                        <button class="btn btn-primary" id="addNewTaskBtn" style="padding: 8px 16px;">➕ הוסף משימה</button>
+                    </div>
+                    <!-- Quick add section will be added dynamically by JS -->
                     <div class="empty-state">ניהול משימות יופיע כאן.</div>
                 </section>
 
-                <!-- Debts Panel (placeholder) -->
+                <!-- Debts Panel -->
                 <section id="debts" class="tab-panel">
+                    <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h2>💰 חובות</h2>
+                        <button class="btn btn-primary" onclick="addQuickItem('debts')" style="padding: 8px 16px;">➕ הוסף חוב</button>
+                    </div>
+                    <!-- Quick add section will be added dynamically by JS -->
                     <div class="empty-state">ניהול חובות יופיע כאן.</div>
                 </section>
 
-                <!-- Bureaucracy Panel (placeholder) -->
+                <!-- Bureaucracy Panel -->
                 <section id="bureaucracy" class="tab-panel">
+                    <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                        <h2>🏛️ ביורוקרטיה</h2>
+                        <button class="btn btn-primary" onclick="addQuickItem('bureaucracy')" style="padding: 8px 16px;">➕ הוסף פריט</button>
+                    </div>
+                    <!-- Quick add section will be added dynamically by JS -->
                     <div class="empty-state">ניהול בירוקרטיה יופיע כאן.</div>
                 </section>
 
@@ -217,7 +232,7 @@
                             <div class="connector-header">
                                 <div>
                                     <h3>📧 Gmail</h3>
-                                    <p class="connector-subtitle">סנכרון מיילים ותכתובות</p>
+                                    <p class="connector-subtitle">סנכרון מיילים חכם עם AI</p>
                                 </div>
                                 <span id="gmailStatusBadge" class="status-chip offline">מנותק</span>
                             </div>
@@ -227,7 +242,25 @@
                                 <div class="connector-actions">
                                     <button id="gmailConnectBtn" class="action-btn primary">🔗 התחברות</button>
                                     <button id="gmailRefreshBtn" class="action-btn secondary">🔄 בדיקת סטטוס</button>
-                                    <button id="gmailQuickSyncBtn" class="action-btn secondary">📨 סנכרן עכשיו</button>
+                                    <button id="gmailQuickSyncBtn" class="action-btn secondary">🧠 סנכרן עם AI</button>
+                                </div>
+                            </div>
+                        </section>
+                        
+                        <section class="connector-card">
+                            <div class="connector-header">
+                                <div>
+                                    <h3>📄 מסמכים</h3>
+                                    <p class="connector-subtitle">העלאה בבולק עם OCR ו-AI</p>
+                                </div>
+                                <span class="status-chip online">פעיל</span>
+                            </div>
+                            <div class="connector-body">
+                                <p class="connector-info">העלה מסמכים לעיבוד אוטומטי עם זיהוי טקסט וניתוח AI</p>
+                                <div class="connector-actions">
+                                    <input type="file" id="documentUpload" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;">
+                                    <button id="uploadDocBtn" class="action-btn primary">📄 העלה מסמכים</button>
+                                    <button onclick="openDocumentUploadModal()" class="action-btn secondary">📚 העלאה מתקדמת</button>
                                 </div>
                             </div>
                         </section>

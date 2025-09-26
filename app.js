@@ -789,6 +789,11 @@ async function triggerGmailSync() {
             return;
         }
 
+        if (response.status === 503) {
+            showNotification('🔧 Gmail לא מוגדר - בדקי את הגדרות הסביבה', 'warning');
+            return;
+        }
+
         if (!response.ok || !payload?.success) {
             throw new Error(payload?.error || `HTTP ${response.status}`);
         }
@@ -2251,5 +2256,147 @@ async function loadAutoActionsPreview() {
         console.log('🔧 הצעות אוטומטיות:', data.data);
     } catch (e) { /* ignore */ }
 }
+
+// Task Input Modal Functions
+let currentTaskType = null;
+
+function openTaskModal(taskType) {
+    currentTaskType = taskType;
+    const modal = document.getElementById('taskModal');
+    const title = document.getElementById('taskModalTitle');
+    
+    // Update modal title based on task type
+    const titles = {
+        'academic': 'הוסף משימה אקדמית',
+        'bureaucracy': 'הוסף משימה בירוקרטית', 
+        'debts': 'הוסף חוב חדש'
+    };
+    
+    title.textContent = titles[taskType] || 'הוסף משימה חדשה';
+    
+    // Show/hide specific fields based on task type
+    document.getElementById('academicFields').style.display = taskType === 'academic' ? 'block' : 'none';
+    document.getElementById('bureaucracyFields').style.display = taskType === 'bureaucracy' ? 'block' : 'none';
+    document.getElementById('debtsFields').style.display = taskType === 'debts' ? 'block' : 'none';
+    
+    // Clear form
+    document.getElementById('taskForm').reset();
+    
+    // Set default due date to tomorrow
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    document.getElementById('taskDueDate').value = tomorrow.toISOString().split('T')[0];
+    
+    modal.style.display = 'flex';
+    document.getElementById('taskTitle').focus();
+}
+
+function closeTaskModal() {
+    const modal = document.getElementById('taskModal');
+    modal.style.display = 'none';
+    currentTaskType = null;
+}
+
+async function saveTask() {
+    if (!currentTaskType) return;
+    
+    const form = document.getElementById('taskForm');
+    const formData = new FormData(form);
+    
+    // Build task object
+    const taskData = {
+        type: currentTaskType,
+        title: formData.get('title'),
+        description: formData.get('description'),
+        due_date: formData.get('due_date'),
+        priority: formData.get('priority'),
+        status: formData.get('status'),
+        client: formData.get('client'),
+        notes: formData.get('notes'),
+        created_at: new Date().toISOString()
+    };
+    
+    // Add type-specific fields
+    if (currentTaskType === 'academic') {
+        taskData.course = formData.get('course');
+    } else if (currentTaskType === 'bureaucracy') {
+        taskData.authority = formData.get('authority');
+    } else if (currentTaskType === 'debts') {
+        taskData.amount = parseFloat(formData.get('amount')) || 0;
+        taskData.currency = formData.get('currency');
+    }
+    
+    // Validate required fields
+    if (!taskData.title.trim()) {
+        showNotification('⚠️ נדרש להזין כותרת למשימה', 'warning');
+        return;
+    }
+    
+    try {
+        // Show loading state
+        const saveBtn = document.querySelector('.btn--primary');
+        const originalText = saveBtn.textContent;
+        saveBtn.textContent = '⏳ שומר...';
+        saveBtn.disabled = true;
+        
+        const response = await fetch(`/api/${currentTaskType}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(taskData)
+        });
+        
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            showNotification(`✅ המשימה נשמרה בהצלחה!`, 'success');
+            closeTaskModal();
+            
+            // Refresh the relevant tab data
+            await loadSmartOverview();
+            
+            // If currently viewing the task type tab, refresh it
+            const activeTab = document.querySelector('.nav-tab.active');
+            if (activeTab && activeTab.dataset.tab === currentTaskType) {
+                // Refresh current tab view
+                loadDomainData(currentTaskType);
+            }
+        } else {
+            throw new Error(result.error || 'Unknown error');
+        }
+        
+    } catch (error) {
+        console.error('Error saving task:', error);
+        showNotification(`❌ שגיאה בשמירת המשימה: ${error.message}`, 'error');
+    } finally {
+        // Restore button state
+        const saveBtn = document.querySelector('.btn--primary');
+        if (saveBtn) {
+            saveBtn.textContent = 'שמור משימה';
+            saveBtn.disabled = false;
+        }
+    }
+}
+
+// Close modal when clicking outside
+document.addEventListener('click', (e) => {
+    const modal = document.getElementById('taskModal');
+    if (e.target === modal) {
+        closeTaskModal();
+    }
+});
+
+// Close modal on Escape key
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        const modal = document.getElementById('taskModal');
+        if (modal.style.display === 'flex') {
+            closeTaskModal();
+        }
+    }
+});
 
 console.log('✅ מיכל AI - מערכת עוזרת אישית מוכנה לעבודה! 🚀');

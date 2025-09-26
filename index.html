@@ -167,7 +167,12 @@
 
                         <!-- Academic Tasks Tab -->
                         <div id="academic" class="tab-panel">
-                            <h2>משימות אקדמיות</h2>
+                            <div class="tab-header">
+                                <h2>משימות אקדמיות</h2>
+                                <button class="add-task-btn" onclick="openTaskModal('academic')">
+                                    <i class="icon">➕</i> הוסף משימה אקדמית
+                                </button>
+                            </div>
                             <div class="table-container">
                                 <table class="tasks-table" id="academicTable">
                                     <thead>
@@ -189,7 +194,12 @@
 
                         <!-- Bureaucracy Tab -->
                         <div id="bureaucracy" class="tab-panel">
-                            <h2>בירוקרטיה גרמנית וישראלית</h2>
+                            <div class="tab-header">
+                                <h2>בירוקרטיה גרמנית וישראלית</h2>
+                                <button class="add-task-btn" onclick="openTaskModal('bureaucracy')">
+                                    <i class="icon">➕</i> הוסף משימה בירוקרטית
+                                </button>
+                            </div>
                             <div class="table-container">
                                 <table class="tasks-table" id="bureaucracyTable">
                                     <thead>
@@ -211,7 +221,12 @@
 
                         <!-- Debts Tab -->
                         <div id="debts" class="tab-panel">
-                            <h2>ניהול חובות וגביה</h2>
+                            <div class="tab-header">
+                                <h2>ניהול חובות וגביה</h2>
+                                <button class="add-task-btn" onclick="openTaskModal('debts')">
+                                    <i class="icon">➕</i> הוסף חוב חדש
+                                </button>
+                            </div>
                             <div class="table-container">
                                 <table class="debts-table" id="debtsTable">
                                     <thead>
@@ -461,7 +476,105 @@
         </div>
     </div>
 
+    <!-- Task Input Modal -->
+    <div id="taskModal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="taskModalTitle">הוסף משימה חדשה</h3>
+                <button class="modal-close" onclick="closeTaskModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="taskForm">
+                    <div class="form-group">
+                        <label for="taskTitle">כותרת המשימה:</label>
+                        <input type="text" id="taskTitle" name="title" required placeholder="למשל: הגשת עבודה סמסטריאלית">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="taskDescription">תיאור מפורט:</label>
+                        <textarea id="taskDescription" name="description" rows="4" placeholder="פרטים נוספים על המשימה..."></textarea>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="taskDueDate">תאריך יעד:</label>
+                            <input type="date" id="taskDueDate" name="due_date">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="taskPriority">דחיפות:</label>
+                            <select id="taskPriority" name="priority">
+                                <option value="low">נמוכה</option>
+                                <option value="medium" selected>בינונית</option>
+                                <option value="high">גבוהה</option>
+                                <option value="urgent">דחוף</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="taskStatus">סטטוס:</label>
+                            <select id="taskStatus" name="status">
+                                <option value="pending">ממתין</option>
+                                <option value="in_progress">בביצוע</option>
+                                <option value="waiting_response">ממתין לתגובה</option>
+                                <option value="completed">הושלם</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="taskClient">לקוח/גורם:</label>
+                            <input type="text" id="taskClient" name="client" placeholder="שם הלקוח או הגורם">
+                        </div>
+                    </div>
+                    
+                    <!-- Fields specific to task type -->
+                    <div id="academicFields" style="display: none;">
+                        <div class="form-group">
+                            <label for="taskCourse">קורס/מקצוע:</label>
+                            <input type="text" id="taskCourse" name="course" placeholder="שם הקורס">
+                        </div>
+                    </div>
+                    
+                    <div id="bureaucracyFields" style="display: none;">
+                        <div class="form-group">
+                            <label for="taskAuthority">רשות:</label>
+                            <input type="text" id="taskAuthority" name="authority" placeholder="למשל: משרד הפנים, בינלאומי">
+                        </div>
+                    </div>
+                    
+                    <div id="debtsFields" style="display: none;">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="taskAmount">סכום:</label>
+                                <input type="number" id="taskAmount" name="amount" step="0.01" placeholder="0.00">
+                            </div>
+                            <div class="form-group">
+                                <label for="taskCurrency">מטבע:</label>
+                                <select id="taskCurrency" name="currency">
+                                    <option value="EUR">יורו (EUR)</option>
+                                    <option value="ILS">שקל (ILS)</option>
+                                    <option value="USD">דולר (USD)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="taskNotes">הערות:</label>
+                        <textarea id="taskNotes" name="notes" rows="3" placeholder="הערות נוספות..."></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn--secondary" onclick="closeTaskModal()">ביטול</button>
+                <button type="button" class="btn btn--primary" onclick="saveTask()">שמור משימה</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Added version query to bust cache so שהקובץ המעודכן ייטען -->
-    <script src="app.js?v=20250925-1"></script>
+    <script src="app.js?v=20250925-2"></script>
 </body>
 </html>

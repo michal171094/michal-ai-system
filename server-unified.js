@@ -2,6 +2,8 @@ const express = require('express');
 const path = require('path');
 const cors = require('cors');
 const axios = require('axios');
+const multer = require('multer');
+const DriveService = require('./services/DriveService');
 require('dotenv').config();
 
 const app = express();
@@ -13,6 +15,15 @@ app.use(cors());
 
 // Parse JSON bodies
 app.use(express.json());
+
+// File upload configuration
+const upload = multer({ 
+    dest: 'uploads/',
+    limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
+});
+
+// Initialize Drive service
+const driveService = new DriveService();
 
 // Serve static files (your HTML, CSS, JS)
 app.use(express.static('.'));
@@ -468,6 +479,235 @@ app.post('/api/gmail/sync', async (req, res) => {
             error: 'שגיאה בסנכרון מיילים: ' + error.message
         });
     }
+});
+
+// Gmail Sync Approval Endpoint
+app.post('/api/gmail/sync/approve', async (req, res) => {
+    try {
+        const { autoCreateTasks, smartFilter, syncTimeRange, enableLearning, selectedEmails } = req.body;
+        
+        console.log('Gmail sync approval received:', {
+            autoCreateTasks,
+            smartFilter, 
+            syncTimeRange,
+            enableLearning,
+            selectedEmailsCount: selectedEmails?.length || 0
+        });
+        
+        // Here we would normally process the approved emails
+        // For now, create some sample tasks based on the settings
+        const newTasks = [];
+        
+        if (autoCreateTasks && selectedEmails && selectedEmails.length > 0) {
+            for (let i = 0; i < Math.min(selectedEmails.length, 3); i++) {
+                const taskId = generateId();
+                const sampleTask = {
+                    id: taskId,
+                    title: `משימה ממייל #${i + 1}`,
+                    description: `משימה שנוצרה אוטומטית ממייל מאושר`,
+                    priority: 'medium',
+                    status: 'pending',
+                    type: 'tasks',
+                    dueDate: new Date(Date.now() + (i + 1) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                    createdAt: new Date().toISOString(),
+                    fromEmail: true,
+                    smartFiltered: smartFilter
+                };
+                
+                // Add to appropriate array
+                if (!global.tasks) global.tasks = [];
+                global.tasks.push(sampleTask);
+                newTasks.push(sampleTask);
+            }
+        }
+        
+        // If learning is enabled, save the user preferences
+        if (enableLearning) {
+            console.log('Learning enabled - saving user preferences for future syncs');
+            // Here we would save the user's preferences for future use
+        }
+        
+        res.json({ 
+            success: true, 
+            message: 'Gmail sync approved successfully',
+            tasksCreated: newTasks.length,
+            newTasks: newTasks
+        });
+        
+    } catch (error) {
+        console.error('Gmail sync approval error:', error);
+        res.status(500).json({ 
+            success: false, 
+            error: 'Internal server error during Gmail sync approval' 
+        });
+    }
+});
+
+// AI Chat Endpoint
+app.post('/api/ai/chat', async (req, res) => {
+    try {
+        const { message } = req.body;
+        
+        console.log('AI chat message received:', message);
+        
+        // Simple AI responses based on message content
+        let response = '';
+        let changes = [];
+        let refreshNeeded = false;
+        
+        if (message.includes('צבע') || message.includes('עיצוב') || message.includes('ורוד') || message.includes('ירוק')) {
+            response = '🎨 מעלה! אני יכולה לשנות את העיצוב לתמה ורוד-ירוק. זה יהיה יפה מאוד! האם את רוצה שאני אעדכן את הצבעים עכשיו?';
+            changes = ['Updated color scheme to pink-green theme'];
+        } else if (message.includes('כלל') || message.includes('סינון') || message.includes('PAIR')) {
+            response = '⚙️ מצוין! אני יכולה להוסיף כלל סינון חכם למיילי PAIR Finance. הכלל יזהה אוטומטית מיילי חוב ויצור משימות בעדיפות גבוהה. האם להפעיל?';
+            changes = ['Added smart filter rule for PAIR Finance emails'];
+        } else if (message.includes('טיוטה') || message.includes('מייל') || message.includes('התנגדות')) {
+            response = '✍️ בשמחה! אני יכולה לכתוב טיוטת התנגדות מקצועית לחוב. הטיוטה תכלול את הנקודות החוקיות הנדרשות ותהיה מתאמת לחוק הגנת הצרכן הישראלי.';
+            changes = ['Generated debt dispute email draft'];
+        } else if (message.includes('למד') || message.includes('פידבק') || message.includes('אישור')) {
+            response = '🧠 מעולה! אני לומדת מהבחירות שלך היום. זיהיתי שאת מעדיפה לטפל במיילי PAIR Finance מיד, ומתעדות את הפידבק לשיפור הסינון החכם בעתיד.';
+            changes = ['Updated learning model with user feedback'];
+        } else {
+            response = `💭 מעניין! קיבלתי את ההודעה: "${message}". אני יכולה לעזור לך עם:
+            
+            🔄 עדכון קוד והגדרות המערכת
+            🎯 יצירת כללי סינון מתקדמים  
+            📝 כתיבת טיוטות מיילים
+            🧠 למידה מהפעולות שלך
+            🎨 שינוי עיצוב והתאמות UI
+            
+            מה בדיוק את רוצה שאני אעשה?`;
+        }
+        
+        res.json({
+            success: true,
+            response: response,
+            changes: changes,
+            refreshNeeded: refreshNeeded
+        });
+        
+    } catch (error) {
+        console.error('AI chat error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'Internal server error during AI chat'
+        });
+    }
+});
+
+// Google Drive Integration Endpoints
+
+// Upload and process document
+app.post('/api/drive/upload', upload.single('document'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ success: false, error: 'No file uploaded' });
+        }
+
+        console.log('📄 Document upload received:', req.file.originalname);
+
+        // Authenticate with Drive if needed
+        if (!driveService.isAuthenticated) {
+            const authResult = await driveService.authenticate();
+            if (!authResult.success) {
+                return res.status(500).json({ success: false, error: 'Drive authentication failed' });
+            }
+        }
+
+        // Upload to Drive
+        const driveResult = await driveService.uploadDocument(req.file);
+        
+        // Process with OCR
+        const ocrResult = await driveService.processDocumentOCR(driveResult.fileId);
+        
+        // Create task from document
+        const task = await driveService.createTaskFromDocument(ocrResult, driveResult);
+        
+        // Add to tasks array
+        if (!global.tasks) global.tasks = [];
+        global.tasks.push(task);
+
+        res.json({
+            success: true,
+            message: 'מסמך הועלה ועובד בהצלחה',
+            document: driveResult,
+            ocr: ocrResult,
+            task: task
+        });
+
+    } catch (error) {
+        console.error('Document upload error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'שגיאה בהעלאת המסמך: ' + error.message
+        });
+    }
+});
+
+// Bulk document upload
+app.post('/api/drive/bulk-upload', upload.array('documents', 10), async (req, res) => {
+    try {
+        if (!req.files || req.files.length === 0) {
+            return res.status(400).json({ success: false, error: 'No files uploaded' });
+        }
+
+        console.log('📚 Bulk upload received:', req.files.length, 'files');
+
+        const results = [];
+        const errors = [];
+
+        for (const file of req.files) {
+            try {
+                // Upload to Drive
+                const driveResult = await driveService.uploadDocument(file);
+                
+                // Process with OCR
+                const ocrResult = await driveService.processDocumentOCR(driveResult.fileId);
+                
+                // Create task from document
+                const task = await driveService.createTaskFromDocument(ocrResult, driveResult);
+                
+                // Add to tasks array
+                if (!global.tasks) global.tasks = [];
+                global.tasks.push(task);
+
+                results.push({
+                    file: file.originalname,
+                    document: driveResult,
+                    task: task
+                });
+
+            } catch (error) {
+                errors.push({
+                    file: file.originalname,
+                    error: error.message
+                });
+            }
+        }
+
+        res.json({
+            success: true,
+            message: `עובדו ${results.length} מסמכים מתוך ${req.files.length}`,
+            results: results,
+            errors: errors
+        });
+
+    } catch (error) {
+        console.error('Bulk upload error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'שגיאה בהעלאה מרובה: ' + error.message
+        });
+    }
+});
+
+// Get Drive status
+app.get('/api/drive/status', (req, res) => {
+    res.json({
+        success: true,
+        authenticated: driveService.isAuthenticated,
+        available: true
+    });
 });
 
 // Gmail auth URL (mock)

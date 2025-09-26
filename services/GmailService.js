@@ -1,15 +1,22 @@
 const fs = require('fs');
 const path = require('path');
 const { google } = require('googleapis');
+const { getGmailConfig } = require('../config/gmail-config');
 
 class GmailService {
     constructor() {
-        const clientId = process.env.GOOGLE_CLIENT_ID;
-        const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-        const redirectUri = process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3000/auth/google/callback';
+        const gmailConfig = getGmailConfig();
+        
+        if (!gmailConfig) {
+            throw new Error('Gmail configuration not available - check environment variables');
+        }
+
+        const clientId = gmailConfig.CLIENT_ID;
+        const clientSecret = gmailConfig.CLIENT_SECRET;
+        const redirectUri = gmailConfig.REDIRECT_URI;
 
         if (!clientId || !clientSecret) {
-            throw new Error('Missing Google OAuth credentials. Please set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env');
+            throw new Error('Missing Google OAuth credentials in configuration');
         }
 
         this.tokenPath = path.resolve(__dirname, '../config/gmail-tokens.json');

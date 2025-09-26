@@ -1,5 +1,11 @@
 // Unified server combining AgentCore (priorities/questions) + Gmail + existing mock data
 require('dotenv').config();
+
+// Fallback environment variables for deployment (use Render environment variables instead)
+if (!process.env.GOOGLE_CLIENT_ID && !process.env.GOOGLE_CLIENT_SECRET) {
+  console.log('🔧 Gmail OAuth not configured - please set environment variables in Render dashboard');
+  console.log('Required: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI');
+}
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');

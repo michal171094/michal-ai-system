@@ -680,6 +680,381 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
 });
 
+// Enhanced email analysis with better task matching
+async function analyzeEmailContent(subject, sender, body, date, messageId) {
+    const lowerSubject = subject.toLowerCase();
+    const lowerBody = body.toLowerCase();
+    const lowerSender = sender.toLowerCase();
+
+    // Use AI to analyze email content
+    const aiAnalysis = await analyzeEmailWithAI(subject, sender, body);
+    
+    if (aiAnalysis.shouldCreateUpdate) {
+        return {
+            type: aiAnalysis.type,
+            title: aiAnalysis.title,
+            content: aiAnalysis.content,
+            priority: aiAnalysis.priority,
+            category: aiAnalysis.category,
+            approved: false,
+            sender: sender,
+            date: date,
+            message_id: messageId,
+            existing_task_match: aiAnalysis.existing_task_match,
+            existing_task_title: aiAnalysis.existing_task_title,
+            suggested_actions: aiAnalysis.suggested_actions,
+            deadline: aiAnalysis.deadline,
+            consequences: aiAnalysis.consequences,
+            needs_focused_search: aiAnalysis.needs_focused_search || false,
+            email_link: `https://mail.google.com/mail/u/0/#inbox/${messageId}`
+        };
+    }
+
+    return null; // No update needed for this email
+}
+
+// AI-powered email analysis with improved matching
+async function analyzeEmailWithAI(subject, sender, body) {
+    try {
+        // Prepare context with existing tasks for better matching
+        const existingTasks = realData?.tasks || [];
+        const existingDebts = realData?.debts || [];
+        
+        const prompt = `
+Analyze this email and determine if it needs a task update:
+
+EMAIL:
+Subject: ${subject}
+From: ${sender}
+Content: ${body.substring(0, 600)}
+
+EXISTING TASKS (for matching):
+${existingTasks.slice(0, 8).map(task => `- "${task.subject}" (Entity: ${task.entity}, Case: ${task.case_number || 'none'})`).join('\n')}
+
+EXISTING DEBTS (for matching):
+${existingDebts.slice(0, 6).map(debt => `- ${debt.creditor} (Amount: ${debt.amount}, Case: ${debt.case_number || 'none'})`).join('\n')}
+
+ANALYSIS RULES:
+1. Is this a debt collection email? Look for: PAIR Finance, collection agency, debt amount, case numbers
+2. Is this a bureaucracy email? Look for: government agencies, official documents, deadlines
+3. Is this a health email? Look for: doctor names, prescriptions, medical appointments
+4. Does this match an existing task? Check sender name, case numbers, amounts
+
+TASK TITLE FORMAT:
+- Debt: "PAIR Finance - [Original Company]" (e.g., "PAIR Finance - Amazon")
+- Bureaucracy: "[Agency] - [Process]" (e.g., "Standesamt Berlin - Marriage")
+- Health: "[Doctor] - [Treatment]" (e.g., "Dr Goldstein - Prescription")
+
+CRITICAL: Only match to existing tasks if:
+- Sender name matches task entity
+- Case number matches exactly
+- Amount matches existing debt
+- Same company/agency
+
+Respond with JSON only:
+{
+    "shouldCreateUpdate": true/false,
+    "type": "new_task" or "update_task",
+    "title": "Exact task title",
+    "content": "Brief description of what changed",
+    "priority": 1-10,
+    "category": "debt" or "bureaucracy" or "health",
+    "existing_task_match": task_id or null,
+    "existing_task_title": "exact title if updating existing task",
+    "suggested_actions": ["action1", "action2"],
+    "deadline": "YYYY-MM-DD" or null,
+    "consequences": "what happens if ignored"
+}
+
+IMPORTANT:
+- Use English only in JSON values
+- No special characters like € or quotes in JSON
+- Be precise with task matching
+- Only create updates for important emails
+`;
+
+        // Check if AI service is available
+        if (!aiService.isAvailable) {
+            console.log('🚨🚨🚨 AI Service לא זמין! 🚨🚨🚨');
+            console.log('🚨 המערכת לא באמת חכמה - רק זיהוי מילות מפתח בסיסי');
+            return fallbackEmailAnalysis(subject, sender, body);
+        }
+
+        try {
+            const response = await aiService.analyzeEmail(prompt);
+            console.log(`🤖 AI Analysis for ${subject}:`, response.substring(0, 200) + '...');
+            
+            // Try to extract JSON from response with better parsing
+            let jsonMatch = response.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) {
+                throw new Error('No JSON found in AI response');
+            }
+            
+            let jsonString = jsonMatch[0];
+            
+            // Fix common JSON issues more aggressively
+            jsonString = jsonString
+                .replace(/'/g, '"')  // Replace single quotes with double quotes
+                .replace(/(\w+):/g, '"$1":')  // Quote property names
+                .replace(/,\s*}/g, '}')  // Remove trailing commas before }
+                .replace(/,\s*]/g, ']')  // Remove trailing commas before ]
+                .replace(/\\"/g, '\\"')  // Fix escaped quotes
+                .replace(/([^\\])"/g, '$1\\"')  // Escape quotes in content
+                .replace(/^"/, '\\"')  // Escape leading quote
+                .replace(/"$/, '\\"')  // Escape trailing quote
+                .replace(/\n/g, ' ')  // Replace newlines with spaces
+                .replace(/\s+/g, ' ')  // Normalize whitespace
+                .replace(/"[^"]*"[^"]*"/g, (match) => {
+                    // Handle Hebrew text in quotes - escape internal quotes
+                    return match.replace(/([^\\])"/g, '$1\\"');
+                });
+
+            const analysis = JSON.parse(jsonString);
+            console.log(`✅ AI Analysis successful for: ${subject}`);
+            return analysis;
+            
+        } catch (parseError) {
+            console.log(`⚠️ AI parsing failed for ${subject}:`, parseError.message);
+            console.log(`📧 Raw AI response:`, response);
+            console.log(`📧 Cleaned JSON string:`, jsonString);
+            console.log(`📧 Using fallback analysis for: ${subject}`);
+            return fallbackEmailAnalysis(subject, sender, body);
+        }
+        
+    } catch (error) {
+        console.error('AI email analysis error:', error);
+        // Fallback to keyword-based analysis
+        return fallbackEmailAnalysis(subject, sender, body);
+    }
+}
+
+// Fallback analysis using improved keywords
+function fallbackEmailAnalysis(subject, sender, body) {
+    const lowerSubject = subject.toLowerCase();
+    const lowerBody = body.toLowerCase();
+    const lowerSender = sender.toLowerCase();
+    
+    console.log(`📧 Fallback analysis for: ${subject}`);
+    console.log(`📧 Sender: ${sender}`);
+
+    // Check for subscription cancellations first (like Perplexity)
+    if (lowerSubject.includes('subscription') || lowerSubject.includes('cancellation') || 
+        lowerSubject.includes('billing') || lowerSender.includes('perplexity')) {
+        console.log(`📧 Identified as subscription cancellation - skipping`);
+        return { shouldCreateUpdate: false };
+    }
+
+    // Skip spam/newsletter emails
+    const spamKeywords = [
+        'newsletter', 'unsubscribe', 'promotion', 'offer', 'deal', 'discount',
+        'marketing', 'advertisement', 'spam', 'noreply', 'no-reply',
+        'automated', 'system', 'notification', 'reminder', 'update'
+    ];
+
+    // Skip if it's clearly spam/newsletter
+    if (spamKeywords.some(keyword => 
+        lowerSender.includes(keyword) || 
+        lowerSubject.includes(keyword) || 
+        lowerBody.includes(keyword)
+    )) {
+        console.log(`🚫 Skipping spam/newsletter: ${subject}`);
+        return { shouldCreateUpdate: false };
+    }
+
+    // Skip automated/system emails
+    if (lowerSender.includes('noreply') || 
+        lowerSender.includes('no-reply') || 
+        lowerSender.includes('automated') ||
+        lowerSubject.includes('automatic') ||
+        lowerSubject.includes('system')) {
+        console.log(`🤖 Skipping automated email: ${subject}`);
+        return { shouldCreateUpdate: false };
+    }
+
+    // Comprehensive debt-related keywords
+    const debtKeywords = [
+        'pair', 'inkasso', 'zahlung', 'zahlungsaufforderung', 'payment', 'debt',
+        'schuld', 'forderung', 'rechnung', 'invoice', 'bill', 'collector',
+        'inkasso', 'mahnen', 'mahnung', 'collection', 'outstanding'
+    ];
+
+    // Government/legal keywords
+    const governmentKeywords = [
+        'standesamt', 'behörde', 'amt', 'berlin', 'bundesamt', 'ausländerbehörde',
+        'einwanderung', 'lea', 'jobcenter', 'sozialamt', 'finanzamt', 'tax',
+        'immigration', 'visa', 'aufenthalt', 'residence', 'citizenship'
+    ];
+
+    // Health insurance keywords
+    const healthKeywords = [
+        'tk', 'krankenkasse', 'versicherung', 'insurance', 'kranken', 'health',
+        'familienversicherung', 'family insurance', 'krankenversicherung',
+        'aok', 'barmer', 'dak', 'hauptversicherung'
+    ];
+
+    // Check for debt-related content
+    if (debtKeywords.some(keyword => lowerSender.includes(keyword) || lowerSubject.includes(keyword) || lowerBody.includes(keyword))) {
+        // Extract smart information from email
+        let amount = 'לא צוין';
+        let deadline = 'לא צוין';
+        let caseNumber = 'לא צוין';
+        
+        // Try to extract amount
+        const amountMatch = body.match(/(\d+[.,]\d+)\s*(EUR|euro|€|יורו)/i);
+        if (amountMatch) {
+            amount = `${amountMatch[1]} ${amountMatch[2]}`;
+        }
+        
+        // Try to extract deadline
+        const dateMatch = body.match(/(\d{1,2}[.\-/]\d{1,2}[.\-/]\d{2,4}|\d{1,2}\s+\w+\s+\d{4})/i);
+        if (dateMatch) {
+            deadline = dateMatch[1];
+        }
+        
+        // Try to extract case number
+        const caseMatch = body.match(/(case|aktenzeichen|file|nummer)[\s:]*([A-Z0-9\-]+)/i);
+        if (caseMatch) {
+            caseNumber = caseMatch[2];
+        }
+        
+        // Check for existing task/debt matches with improved logic
+        const existingTasks = realData?.tasks || [];
+        const existingDebts = realData?.debts || [];
+        
+        // Find matching existing task/debt with better logic
+        let existingMatch = null;
+        let existingTaskTitle = null;
+        
+        // First, try to match by case number (most reliable)
+        if (caseNumber !== 'לא צוין') {
+            existingMatch = existingTasks.find(task => 
+                task.case_number && task.case_number.toString() === caseNumber
+            ) || existingDebts.find(debt => 
+                debt.case_number && debt.case_number.toString() === caseNumber
+            );
+            
+            if (existingMatch) {
+                existingTaskTitle = existingMatch.subject || existingMatch.title;
+                console.log(`📋 Found match by case number: ${caseNumber} -> ${existingTaskTitle}`);
+            }
+        }
+        
+        // If no case number match, try to match by sender/creditor
+        if (!existingMatch) {
+            // Extract creditor name from sender
+            let creditorName = sender;
+            if (sender.includes('PAIR Finance')) {
+                creditorName = 'PAIR Finance';
+            } else if (sender.includes('Inkasso') || sender.includes('Collection')) {
+                creditorName = sender.split('@')[0].replace(/[^a-zA-Z\s]/g, '');
+            }
+            
+            // Look for matching debt or task
+            existingMatch = existingDebts.find(debt => 
+                debt.creditor && debt.creditor.toLowerCase().includes(creditorName.toLowerCase())
+            ) || existingTasks.find(task => 
+                task.entity && task.entity.toLowerCase().includes(creditorName.toLowerCase())
+            );
+            
+            if (existingMatch) {
+                existingTaskTitle = existingMatch.subject || existingMatch.title;
+                console.log(`📋 Found match by creditor: ${creditorName} -> ${existingTaskTitle}`);
+            }
+        }
+        
+        // If still no match, try to match by amount (for debts)
+        if (!existingMatch && amount !== 'לא צוין') {
+            const amountNum = parseFloat(amount.replace(/[^\d.,]/g, '').replace(',', '.'));
+            existingMatch = existingDebts.find(debt => 
+                debt.amount && Math.abs(parseFloat(debt.amount) - amountNum) < 0.01
+            );
+            
+            if (existingMatch) {
+                existingTaskTitle = existingMatch.subject || existingMatch.title;
+                console.log(`📋 Found match by amount: ${amount} -> ${existingTaskTitle}`);
+            }
+        }
+        
+        // Determine title based on whether it's an update or new task
+        let title;
+        if (existingMatch) {
+            // This is an update to existing task
+            title = existingTaskTitle;
+        } else {
+            // This is a new task - create proper title
+            if (sender.includes('PAIR Finance')) {
+                // Extract original creditor from body or use default
+                const creditorMatch = body.match(/für\s+([^,]+)|von\s+([^,]+)|original\s+creditor[:\s]+([^,\n]+)/i);
+                const originalCreditor = creditorMatch ? (creditorMatch[1] || creditorMatch[2] || creditorMatch[3]).trim() : 'Unknown';
+                title = `PAIR Finance - ${originalCreditor}`;
+            } else {
+                title = sender.includes('@') ? sender.split('@')[0] : sender;
+            }
+        }
+        
+        // Log matching results for debugging
+        if (existingMatch) {
+            console.log(`🔗 Found match for email "${subject}" - Task: ${existingTaskTitle}`);
+        }
+
+        return {
+            shouldCreateUpdate: true,
+            type: existingMatch ? 'update_task' : 'new_task',
+            title: title,
+            content: `PAIR Finance העביר עדכון סכום - החוב עומד על ${amount}`,
+            priority: 8,
+            category: 'debt',
+            existing_task_match: existingMatch ? existingMatch.id : null,
+            existing_task_title: existingTaskTitle,
+            suggested_actions: [
+                `עדכן סכום החוב במשימה הקיימת ל-${amount}`,
+                'וודא תאריך תשלום',
+                'בדוק אם נדרשת פעולה נוספת',
+                'עדכן סטטוס המשימה'
+            ],
+            deadline: deadline,
+            consequences: 'עיכוב בתשלום עלול להוביל לחובות נוספים ועמלות'
+        };
+    }
+
+    // Check for government/bureaucracy content
+    if (governmentKeywords.some(keyword => lowerSender.includes(keyword) || lowerSubject.includes(keyword) || lowerBody.includes(keyword))) {
+        return {
+            shouldCreateUpdate: true,
+            type: 'new_task',
+            title: `${sender.split('@')[0]} - ${subject}`,
+            content: `עדכון רשות/ממשל: ${subject}`,
+            priority: 6,
+            category: 'bureaucracy',
+            suggested_actions: [
+                'בדוק מסמכים נדרשים',
+                'וודא תאריכים',
+                'הגב במידת הצורך'
+            ]
+        };
+    }
+
+    // Check for health insurance content
+    if (healthKeywords.some(keyword => lowerSender.includes(keyword) || lowerSubject.includes(keyword) || lowerBody.includes(keyword))) {
+        return {
+            shouldCreateUpdate: true,
+            type: 'new_task',
+            title: `${sender.split('@')[0]} - ${subject}`,
+            content: `עדכון ביטוח בריאות: ${subject}`,
+            priority: 5,
+            category: 'health',
+            suggested_actions: [
+                'בדוק סטטוס הביטוח',
+                'וודא תשלומים',
+                'עדכן פרטים אם נדרש'
+            ]
+        };
+    }
+
+    // If no specific category matches, don't create update
+    return { shouldCreateUpdate: false };
+}
+
 // Start server
 app.listen(PORT, () => {
     console.log(`🚀 מערכת עוזר AI אישית רצה על פורט ${PORT}`);

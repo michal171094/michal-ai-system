@@ -15,7 +15,7 @@ Create separate `.env` files for **web** and **agent** services. Use the existin
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
 
-### Web (`server-clean.js`)
+### Web (`server-unified.js`)
 - `PORT` (Render/Railway auto‑injects `PORT`)
 - `AI_AGENT_URL` → `https://agent.your-domain.com`
 
@@ -81,7 +81,7 @@ It automatically runs on every push/PR to `main` (or manually through "Run workf
 
 1. Push repo to GitHub.
 2. Create two **Web Services** in Render:
-   - `michal-web` → build command `npm install`, start command `node server-clean.js`
+   - `michal-web` → build command `npm install`, start command `node server-unified.js`
    - `michal-agent` → build command `pip install -r requirements.txt`, start command `uvicorn ai_agent.smart_server:app --host 0.0.0.0 --port $PORT`
 3. Provide environment variables for each service via Render dashboard.
 4. Attach a custom domain per service (e.g., `app.michal.ai` and `agent.michal.ai`).

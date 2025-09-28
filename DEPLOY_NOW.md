@@ -13,7 +13,7 @@
 - Root Directory: (השאר ריק)
 - Environment: `Node`
 - Build Command: `npm install`
-- Start Command: `node server-clean.js`
+- Start Command: `node server-unified.js`
 
 🔧 **Environment Variables (שירות 1):**
 ```

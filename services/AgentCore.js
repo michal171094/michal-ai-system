@@ -1,382 +1,626 @@
-// AgentCore - High level intelligent orchestration layer
-// Provides: memory, knowledge graph, priority scoring, question generation, sync simulation
+/**
+ * AgentCore - The Brain of Life Orchestrator
+ * ===========================================
+ */
 
 const fs = require('fs');
 const path = require('path');
 
-class MemoryStore {
+class MemorySystem {
     constructor() {
-        this.events = [];           // chronological events
-        this.facts = new Map();     // key -> value (latest)
-        this.entityHistory = new Map(); // entityId -> [{timestamp, data}]
-        this.questions = [];        // pending clarification questions
-        this.answers = [];          // answered clarifications
-        this.lastRebuild = null;
-        this.persistenceFile = path.join(__dirname, '..', 'data', 'memory.json');
-        this.ensurePersistenceDir();
-        this.load();
+        this.shortTerm = new Map();
+        this.longTerm = new Map();
+        this.episodic = [];
+        this.patterns = new Map();
     }
-    ensurePersistenceDir() {
-        const dir = path.dirname(this.persistenceFile);
-        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    }
-    load() {
-        try {
-            if (fs.existsSync(this.persistenceFile)) {
-                const raw = JSON.parse(fs.readFileSync(this.persistenceFile, 'utf8'));
-                Object.assign(this, raw);
+
+    remember(key, value, type = 'short') {
+        const memory = {
+            key,
+            value,
+            timestamp: new Date(),
+            accessCount: 0,
+            importance: this.calculateImportance(value)
+        };
+
+        if (type === 'short') {
+            this.shortTerm.set(key, memory);
+            // Move to long-term if accessed frequently
+            if (memory.accessCount > 5) {
+                this.longTerm.set(key, memory);
             }
-        } catch (e) {
-            console.error('⚠️ Memory load failed', e.message);
+        } else {
+            this.longTerm.set(key, memory);
         }
     }
-    persist() {
-        try {
-            fs.writeFileSync(this.persistenceFile, JSON.stringify({
-                events: this.events.slice(-5000), // cap
-                facts: Array.from(this.facts.entries()),
-                entityHistory: Array.from(this.entityHistory.entries()),
-                questions: this.questions,
-                answers: this.answers,
-                lastRebuild: this.lastRebuild
-            }));
-        } catch (e) {
-            console.error('⚠️ Memory persist failed', e.message);
+
+    recall(key) {
+        let memory = this.shortTerm.get(key) || this.longTerm.get(key);
+        if (memory) {
+            memory.accessCount++;
+            memory.lastAccessed = new Date();
+            return memory.value;
         }
+        return null;
     }
-    addEvent(type, payload) {
-        const evt = { id: 'evt_' + Date.now() + '_' + Math.random().toString(36).slice(2), timestamp: new Date().toISOString(), type, payload };
-        this.events.push(evt);
-        if (this.events.length > 10000) this.events.shift();
-        return evt;
-    }
-    setFact(key, value) {
-        this.facts.set(key, { value, ts: Date.now() });
-    }
-    addEntitySnapshot(id, data) {
-        if (!this.entityHistory.has(id)) this.entityHistory.set(id, []);
-        this.entityHistory.get(id).push({ ts: Date.now(), data });
-        if (this.entityHistory.get(id).length > 50) this.entityHistory.get(id).shift();
-    }
-    enqueueQuestion(q) { this.questions.push(q); }
-    answerQuestion(id, answer) {
-        const idx = this.questions.findIndex(q => q.id === id);
-        if (idx !== -1) {
-            const q = this.questions.splice(idx, 1)[0];
-            this.answers.push({ ...q, answer, answeredAt: new Date().toISOString() });
-            return true;
+
+    calculateImportance(value) {
+        let score = 5;
+        if (value.deadline) {
+            const daysLeft = Math.ceil((new Date(value.deadline) - new Date()) / 86400000);
+            if (daysLeft <= 1) score = 10;
+            else if (daysLeft <= 3) score = 8;
+            else if (daysLeft <= 7) score = 6;
         }
-        return false;
+        if (value.amount && value.amount > 1000) score += 2;
+        if (value.priority === 'critical') score = 10;
+        return Math.min(score, 10);
     }
-    pendingQuestions() { return this.questions; }
+
+    findPattern(events) {
+        // Simple pattern detection
+        const timePatterns = {};
+        events.forEach(event => {
+            const hour = new Date(event.timestamp).getHours();
+            timePatterns[hour] = (timePatterns[hour] || 0) + 1;
+        });
+        
+        const mostActiveHour = Object.entries(timePatterns)
+            .sort((a, b) => b[1] - a[1])[0];
+        
+        return {
+            mostActiveHour: mostActiveHour ? parseInt(mostActiveHour[0]) : null,
+            totalEvents: events.length
+        };
+    }
 }
 
 class KnowledgeGraph {
     constructor() {
-        this.nodes = new Map(); // id -> {id,type,props}
-        this.edges = [];        // {from,to,type,props}
-        this.version = 0;
+        this.nodes = new Map();
+        this.edges = [];
+        this.index = new Map();
     }
-    upsertNode(id, type, props = {}) {
-        const existing = this.nodes.get(id) || { id, type, props: {} };
-        existing.type = type;
-        existing.props = { ...existing.props, ...props, updatedAt: new Date().toISOString() };
-        this.nodes.set(id, existing);
-        this.version++;
-        return existing;
-    }
-    link(from, to, type, props = {}) {
-        this.edges.push({ from, to, type, props, ts: Date.now() });
-        if (this.edges.length > 5000) this.edges.shift();
-        this.version++;
-    }
-    getNode(id) { return this.nodes.get(id); }
-    snapshot() {
-        return {
-            nodes: Array.from(this.nodes.values()).slice(0, 500),
-            edges: this.edges.slice(-1000),
-            version: this.version
-        };
-    }
-}
 
-class PriorityEngine {
-    constructor(memory, graph) {
-        this.memory = memory;
-        this.graph = graph;
-    }
-    scoreItem(item, context = {}) {
-        // Provide explainable breakdown of each contributing factor
-        let score = 0;
-        const breakdown = [];
-        const add = (label, points, meta, category) => { if (points) { score += points; breakdown.push({ label, points, meta, category }); } };
-        const now = Date.now();
-        // Deadline urgency
-        if (item.deadline) {
-            const diffDays = (new Date(item.deadline) - now) / 86400000;
-            let pts = 0; let bucket = '';
-            if (diffDays < 0) { pts = 120; bucket = 'overdue'; }
-            else if (diffDays <= 0) { pts = 110; bucket = 'due today'; }
-            else if (diffDays <= 1) { pts = 100; bucket = '≤1d'; }
-            else if (diffDays <= 3) { pts = 85; bucket = '≤3d'; }
-            else if (diffDays <= 7) { pts = 60; bucket = '≤7d'; }
-            else if (diffDays <= 14) { pts = 40; bucket = '≤14d'; }
-            add('דדליין', pts, { diffDays: Number(diffDays.toFixed(2)), bucket }, 'deadline');
-        } else {
-            add('אין דדליין', 10, {}, 'deadline');
-        }
-        // Domain weighting
-        const domainWeights = { debt: 40, bureaucracy: 30, academic: 20, email: 15 };
-        add('דומיין', domainWeights[item.domain] || 10, { domain: item.domain }, 'domain');
-        // Financial impact
-        if (item.amount) {
-            const amt = Number(item.amount) || 0;
-            let pts = 0; let tier = '';
-            if (amt > 5000) { pts = 50; tier = '>5000'; }
-            else if (amt > 1000) { pts = 35; tier = '>1000'; }
-            else if (amt > 300) { pts = 20; tier = '>300'; }
-            else if (amt > 0) { pts = 10; tier = '>0'; }
-            add('סכום כספי', pts, { amount: amt, tier }, 'finance');
-        }
-        // Status urgency (expanded Hebrew statuses)
-        const statusWeights = {
-            'התראה': 40,
-            'פתוח': 25,
-            'בהתנגדות': 30,
-            'בהמתנה': 10,
-            'בעבודה': 20,
-            'בבדיקה': 18,
-            'טרם פתור': 28,
-            'בהליך': 22,
-            'מאושר': 5,
-            'המתנה לאישור': 15
+    addNode(type, data) {
+        const id = `${type}_${data.id || Date.now()}`;
+        const node = {
+            id,
+            type,
+            data,
+            created: new Date(),
+            connections: []
         };
-        add('סטטוס', statusWeights[item.status] || 5, { status: item.status }, 'status');
-        // VIP client influence
-        if (item.client && this.graph.getNode('client_'+item.client)?.props?.tier === 'VIP') {
-            add('לקוח VIP', 25, { client: item.client }, 'context');
+        
+        this.nodes.set(id, node);
+        
+        // Index by type
+        if (!this.index.has(type)) {
+            this.index.set(type, []);
         }
-        // Balance pressure (only for debts)
-        const balance = this.memory.facts.get('finance.currentBalance')?.value;
-        if (balance !== undefined && item.domain === 'debt') {
-            if (balance < 1000) add('יתרה נמוכה (<1000)', 30, { balance }, 'finance');
-            if (balance < (item.amount || 0)) add('יתרה נמוכה מהחוב', 15, { balance, amount: item.amount }, 'finance');
-        }
-        // Recent email linkage signals
-        if (item.lastEmailAt) {
-            const ageHours = (Date.now() - new Date(item.lastEmailAt).getTime())/3600000;
-            if (ageHours <= 48) add('אימייל עדכני (<48h)', 15, { hours: Math.round(ageHours) }, 'communication');
-            else if (ageHours <= 168) add('אימייל אחרון (<7d)', 5, { hours: Math.round(ageHours) }, 'communication');
-        }
-        if (item.emailCount) {
-            if (item.emailCount >= 5) add('ריבוי תכתובת (≥5)', 8, { emailCount: item.emailCount }, 'communication');
-            else if (item.emailCount >= 3) add('תכתובת פעילה (≥3)', 5, { emailCount: item.emailCount }, 'communication');
-        }
-        return { score: Math.round(score), breakdown };
+        this.index.get(type).push(id);
+        
+        // Auto-connect related nodes
+        this.autoConnect(node);
+        
+        return id;
     }
-    rank(items) {
-        return items.map(i => {
-            const { score, breakdown } = this.scoreItem(i);
-            return { ...i, priorityScore: score, breakdown };
-        }).sort((a,b)=> b.priorityScore - a.priorityScore)
-          .slice(0, 100);
-    }
-}
 
-class QuestionEngine {
-    constructor(memory) { this.memory = memory; }
-    generate(dataSet) {
-        const questions = [];
-        // Missing financial balance
-        if (!this.memory.facts.get('finance.currentBalance')) {
-            questions.push({ id: 'q_balance', topic: 'finance', question: 'מה היתרה העדכנית בחשבון העו"ש שלך היום?', importance: 'high' });
+    autoConnect(newNode) {
+        // Connect to related existing nodes
+        this.nodes.forEach((node, id) => {
+            if (node.id !== newNode.id) {
+                const relationship = this.detectRelationship(newNode, node);
+                if (relationship) {
+                    this.addEdge(newNode.id, node.id, relationship);
+                }
+            }
+        });
+    }
+
+    detectRelationship(node1, node2) {
+        const data1 = node1.data;
+        const data2 = node2.data;
+        
+        // Same client/person
+        if (data1.client && data2.client && data1.client === data2.client) {
+            return 'SAME_CLIENT';
         }
-        // Debts missing case numbers
-        const missingCase = dataSet.debts?.filter(d => !d.case_number).slice(0,2) || [];
-        missingCase.forEach((d,i)=>{
-            questions.push({ id: 'q_debtcase_'+i, topic: 'debts', question: `יש חוב של ${d.creditor || 'גורם לא ידוע'} ללא מספר תיק – מה מספר התיק?`, importance: 'medium' });
-        });
-        // Documents required but not found
-        const needDocs = dataSet.bureaucracy?.filter(b => b.action && b.action.includes('מסמכים')) || [];
-        needDocs.slice(0,1).forEach(b=>{
-            questions.push({ id: 'q_doc_'+b.id, topic: 'documents', question: `בשביל '${b.task}' – האם כבר העלית את כל המסמכים הנדרשים?`, importance: 'medium' });
-        });
-        // Only add new unanswered
-        const existingIds = new Set(this.memory.pendingQuestions().map(q=>q.id));
-        questions.filter(q=>!existingIds.has(q.id)).forEach(q=> this.memory.enqueueQuestion({ ...q, createdAt: new Date().toISOString() }));
-        return this.memory.pendingQuestions();
+        
+        // Same authority/company
+        if (data1.authority && data2.authority && data1.authority === data2.authority) {
+            return 'SAME_AUTHORITY';
+        }
+        
+        // Temporal relationship
+        if (data1.deadline && data2.deadline) {
+            const diff = Math.abs(new Date(data1.deadline) - new Date(data2.deadline));
+            if (diff < 86400000) return 'SAME_DAY';
+            if (diff < 604800000) return 'SAME_WEEK';
+        }
+        
+        // Financial relationship
+        if (data1.creditor && data2.creditor && data1.creditor === data2.creditor) {
+            return 'SAME_CREDITOR';
+        }
+        
+        return null;
+    }
+
+    addEdge(from, to, type, metadata = {}) {
+        const edge = {
+            from,
+            to,
+            type,
+            metadata,
+            created: new Date()
+        };
+        
+        this.edges.push(edge);
+        
+        // Update node connections
+        const fromNode = this.nodes.get(from);
+        const toNode = this.nodes.get(to);
+        
+        if (fromNode) fromNode.connections.push({ to, type });
+        if (toNode) toNode.connections.push({ from, type });
+    }
+
+    findPath(from, to) {
+        // Simple BFS pathfinding
+        const visited = new Set();
+        const queue = [[from]];
+        
+        while (queue.length > 0) {
+            const path = queue.shift();
+            const current = path[path.length - 1];
+            
+            if (current === to) return path;
+            
+            if (!visited.has(current)) {
+                visited.add(current);
+                const node = this.nodes.get(current);
+                
+                if (node) {
+                    node.connections.forEach(conn => {
+                        queue.push([...path, conn.to]);
+                    });
+                }
+            }
+        }
+        
+        return null;
+    }
+
+    getContext(nodeId, depth = 2) {
+        const context = {
+            node: this.nodes.get(nodeId),
+            related: [],
+            patterns: []
+        };
+        
+        if (!context.node) return context;
+        
+        // Get connected nodes up to depth
+        const visited = new Set();
+        const queue = [{ id: nodeId, level: 0 }];
+        
+        while (queue.length > 0) {
+            const { id, level } = queue.shift();
+            
+            if (level > depth || visited.has(id)) continue;
+            visited.add(id);
+            
+            const node = this.nodes.get(id);
+            if (node && id !== nodeId) {
+                context.related.push({ node, level });
+            }
+            
+            if (node && level < depth) {
+                node.connections.forEach(conn => {
+                    queue.push({ id: conn.to || conn.from, level: level + 1 });
+                });
+            }
+        }
+        
+        return context;
     }
 }
 
 class AgentCore {
     constructor() {
-        this.memory = new MemoryStore();
+        this.memory = new MemorySystem();
         this.graph = new KnowledgeGraph();
-        this.priorityEngine = new PriorityEngine(this.memory, this.graph);
-        this.questionEngine = new QuestionEngine(this.memory);
-        this.lastSyncStats = null;
-        this.emailClassifierRules = this.buildEmailClassifier();
-    }
-    ingestInitial(appData) {
-        if (!appData) return;
-        // populate knowledge graph
-        (appData.tasks||[]).forEach(t=>{
-            this.graph.upsertNode('task_'+t.id, 'task', t);
-            if (t.client) this.graph.upsertNode('client_'+t.client, 'client', { name: t.client });
-        });
-        (appData.debts||[]).forEach(d=>{
-            this.graph.upsertNode('debt_'+d.id, 'debt', d);
-        });
-        (appData.bureaucracy||[]).forEach(b=>{
-            this.graph.upsertNode('bureau_'+b.id, 'bureaucracy_task', b);
-        });
-        this.memory.addEvent('initial_ingest', { counts: { tasks: appData.tasks?.length, debts: appData.debts?.length, bureaucracy: appData.bureaucracy?.length }});
-        this.memory.persist();
-    }
-    updateFinancialBalance(balance) {
-        this.memory.setFact('finance.currentBalance', balance);
-        this.memory.addEvent('finance_balance_update', { balance });
-        this.memory.persist();
-    }
-    buildUnifiedItems(appData) {
-        const list = [];
-        (appData.tasks||[]).forEach(t=> list.push({ id: 'task_'+t.id, domain: 'academic', title: t.project, deadline: t.deadline, status: t.status, client: t.client, action: t.action, amount: t.value, currency: t.currency, lastEmailAt: t.lastEmailAt, emailCount: t.emailCount }));
-        (appData.debts||[]).forEach(d=> list.push({ id: 'debt_'+d.id, domain: 'debt', title: d.company + ' - ' + d.creditor, deadline: d.deadline, status: d.status, action: d.action, amount: d.amount, currency: d.currency, case_number: d.case_number, lastEmailAt: d.lastEmailAt, emailCount: d.emailCount }));
-        (appData.bureaucracy||[]).forEach(b=> list.push({ id: 'bureau_'+b.id, domain: 'bureaucracy', title: b.task + ' - ' + b.authority, deadline: b.deadline, status: b.status, action: b.action, lastEmailAt: b.lastEmailAt, emailCount: b.emailCount }));
-        (appData.emails||[]).forEach(e=> list.push({ id: 'email_'+e.id, domain: 'email', title: e.subject || '(ללא נושא)', deadline: null, status: 'חדש', action: 'עיבוד', from: e.from }));
-        return list;
-    }
-    ingestEmails(appData, emails) {
-        if (!emails || !emails.length) return { linked:0 };
-        let linked = 0;
-        const norm = s => (s||'').toLowerCase();
-        const allEntities = [
-            ...(appData.tasks||[]).map(t=> ({ kind:'task', ref:t, label: norm(t.project + ' ' + (t.client||'')) })),
-            ...(appData.debts||[]).map(d=> ({ kind:'debt', ref:d, label: norm(d.company + ' ' + d.creditor + ' ' + (d.case_number||'')) })),
-            ...(appData.bureaucracy||[]).map(b=> ({ kind:'bureaucracy', ref:b, label: norm(b.task + ' ' + b.authority) }))
-        ];
-        emails.forEach(em => {
-            const subject = norm(em.subject);
-            const snippet = norm(em.snippet);
-            if (!subject && !snippet) return;
-            let best = null; let bestScore = 0;
-            allEntities.forEach(ent => {
-                let score = 0;
-                if (ent.ref.case_number && subject.includes(ent.ref.case_number)) score += 70;
-                if (ent.ref.case_number && snippet.includes(ent.ref.case_number)) score += 40;
-                const tokens = ent.label.split(/[^א-תa-z0-9]+/).filter(w=> w.length>2);
-                let hits = 0;
-                tokens.forEach(tok=> { if (tok && (subject.includes(tok) || snippet.includes(tok))) hits++; });
-                if (hits) score += Math.min(40, hits*5);
-                if (ent.ref.lastEmailAt) score += 5; // continuity boost
-                if (score > bestScore) { bestScore = score; best = ent; }
-            });
-            if (best && bestScore >= 30) {
-                best.ref.lastEmailAt = em.date || new Date().toISOString();
-                best.ref.emailCount = (best.ref.emailCount||0)+1;
-                linked++;
-                this.graph.upsertNode('email_'+em.id, 'email', { subject: em.subject, from: em.from, date: em.date });
-                const entId = best.kind + '_' + best.ref.id;
-                this.graph.link('email_'+em.id, entId, 'related');
-                this.memory.addEvent('email_linked', { emailId: em.id, entity: entId, score: bestScore });
-            }
-        });
-        this.memory.persist();
-        return { linked };
-    }
-    getPriorities(appData) {
-        const unified = this.buildUnifiedItems(appData);
-        const ranked = this.priorityEngine.rank(unified);
-        this.memory.addEvent('priority_calculated', { total: unified.length });
-        return ranked;
-    }
-    generateQuestions(appData) {
-        return this.questionEngine.generate(appData);
-    }
-    runSyncSimulation(sources= ['emails','debts','bureaucracy','academic']) {
-        // simulate durations
-        const result = sources.map(src=> ({ source: src, items: Math.floor(Math.random()*5)+1, durationMs: 300 + Math.floor(Math.random()*700) }));
-        this.lastSyncStats = { at: new Date().toISOString(), result };
-        this.memory.addEvent('sync_run', this.lastSyncStats);
-        this.memory.persist();
-        return this.lastSyncStats;
-    }
-    stateSnapshot(appData) {
-        return {
-            version: 1,
-            memory: {
-                events: this.memory.events.slice(-20),
-                facts: Object.fromEntries(this.memory.facts),
-                pendingQuestions: this.memory.pendingQuestions()
-            },
-            knowledgeGraph: this.graph.snapshot(),
-            lastSync: this.lastSyncStats,
-            prioritiesPreview: this.getPriorities(appData).slice(0,10)
+        this.state = {
+            currentFocus: null,
+            activeProcesses: [],
+            pendingDecisions: [],
+            userProfile: {}
         };
     }
-    metrics(appData) {
-        const unified = this.buildUnifiedItems(appData);
-        return {
-            ts: new Date().toISOString(),
-            counts: {
-                tasks: appData.tasks?.length||0,
-                debts: appData.debts?.length||0,
-                bureaucracy: appData.bureaucracy?.length||0,
-                emails: appData.emails?.length||0,
-                unified: unified.length
-            },
-            recentEvents: this.memory.events.slice(-5).map(e=>({type:e.type, ts:e.timestamp})),
-            memoryFacts: Object.fromEntries(this.memory.facts),
-            graph: { nodes: this.graph.nodes.size, edges: this.graph.edges.length }
-        };
-    }
-    buildEmailClassifier() {
-        return [
-            { tag: 'urgent', patterns: [/urgent/i, /דחוף/, /התראה/, /action required/i] },
-            { tag: 'payment', patterns: [/invoice/i, /payment/i, /תשלום/, /חשבונית/, /סילוק/ ] },
-            { tag: 'legal', patterns: [/law/i, /legal/i, /התנגדות/, /appeal/i, /ערעור/] },
-            { tag: 'document', patterns: [/document/i, /מסמך/, /attachment/, /מצורף/, /מסמכים/] },
-            { tag: 'debt', patterns: [/debt/i, /collection/i, /גביה/, /חוב/, /inkasso/i] },
-            { tag: 'bureaucracy', patterns: [/authority/i, /office/i, /ministerium/i, /משרד/, /רשות/] },
-            { tag: 'academic', patterns: [/seminar/i, /research/i, /paper/i, /מאמר/, /סמינר/] }
-        ];
-    }
-    classifyEmail(email) {
-        const text = (email.subject + ' ' + (email.snippet||'')).toLowerCase();
-        const tags = [];
-        for (const rule of this.emailClassifierRules) {
-            if (rule.patterns.some(p=> p.test(text))) tags.push(rule.tag);
+
+    static instance = null;
+
+    static getInstance() {
+        if (!AgentCore.instance) {
+            AgentCore.instance = new AgentCore();
         }
-        return [...new Set(tags)];
+        return AgentCore.instance;
     }
-    enrichEmails(appData) {
-        if (!appData.emails) return; 
-        appData.emails.forEach(em => {
-            if (!em.tags) {
-                em.tags = this.classifyEmail(em);
+
+    static ingestInitial(appData) {
+        const instance = AgentCore.getInstance();
+        instance.ingest(appData);
+    }
+
+    ingest(appData) {
+        // Ingest all data into knowledge graph and memory
+        ['tasks', 'debts', 'bureaucracy', 'emails'].forEach(category => {
+            if (appData[category]) {
+                appData[category].forEach(item => {
+                    const nodeId = this.graph.addNode(category, item);
+                    this.memory.remember(`${category}_${item.id}`, item);
+                    
+                    // Track active processes
+                    if (item.status && item.status !== 'completed') {
+                        this.state.activeProcesses.push({
+                            id: nodeId,
+                            type: category,
+                            item
+                        });
+                    }
+                });
             }
         });
+        
+        console.log(`📊 Ingested ${this.graph.nodes.size} items into knowledge graph`);
     }
-    generateAutoActions(appData) {
-        this.enrichEmails(appData);
+
+    static getPriorities(appData) {
+        const instance = AgentCore.getInstance();
+        return instance.calculatePriorities(appData);
+    }
+
+    calculatePriorities(appData) {
+        const priorities = [];
+        const now = new Date();
+        
+        // Process all items and calculate priority scores
+        ['tasks', 'debts', 'bureaucracy'].forEach(category => {
+            if (appData[category]) {
+                appData[category].forEach(item => {
+                    let score = 0;
+                    let factors = [];
+                    
+                    // Deadline factor
+                    if (item.deadline) {
+                        const daysLeft = Math.ceil((new Date(item.deadline) - now) / 86400000);
+                        if (daysLeft <= 0) {
+                            score += 100;
+                            factors.push('overdue');
+                        } else if (daysLeft <= 1) {
+                            score += 90;
+                            factors.push('due_today');
+                        } else if (daysLeft <= 3) {
+                            score += 70;
+                            factors.push('due_soon');
+                        } else if (daysLeft <= 7) {
+                            score += 50;
+                            factors.push('this_week');
+                        } else {
+                            score += 20;
+                        }
+                    }
+                    
+                    // Priority factor
+                    if (item.priority === 'critical' || item.priority === 'דחוף') score += 50;
+                    else if (item.priority === 'high' || item.priority === 'גבוה') score += 30;
+                    else if (item.priority === 'medium' || item.priority === 'בינוני') score += 10;
+                    
+                    // Financial factor
+                    if (item.amount || item.value) {
+                        const amount = item.amount || item.value;
+                        if (amount > 5000) score += 30;
+                        else if (amount > 1000) score += 20;
+                        else if (amount > 500) score += 10;
+                    }
+                    
+                    // Status factor
+                    if (item.status === 'blocked') score += 40;
+                    else if (item.status === 'waiting') score += 20;
+                    
+                    // Context from knowledge graph
+                    const context = this.graph.getContext(`${category}_${item.id}`);
+                    if (context.related.length > 3) {
+                        score += 15; // Many dependencies
+                        factors.push('complex');
+                    }
+                    
+                    priorities.push({
+                        ...item,
+                        category,
+                        priorityScore: score,
+                        factors,
+                        context
+                    });
+                });
+            }
+        });
+        
+        // Sort by priority score
+        priorities.sort((a, b) => b.priorityScore - a.priorityScore);
+        
+        return priorities;
+    }
+
+    static generateQuestions(appData) {
+        const instance = AgentCore.getInstance();
+        return instance.generateContextualQuestions(appData);
+    }
+
+    generateContextualQuestions(appData) {
+        const questions = [];
+        const patterns = this.memory.findPattern(this.state.activeProcesses);
+        
+        // Questions based on incomplete information
+        this.state.activeProcesses.forEach(process => {
+            if (!process.item.estimated_completion) {
+                questions.push({
+                    id: `q_${Date.now()}_1`,
+                    type: 'estimation',
+                    text: `מתי את מעריכה שתסיימי את ${process.item.project || process.item.task}?`,
+                    context: process
+                });
+            }
+            
+            if (process.item.status === 'blocked' && !process.item.blocker_reason) {
+                questions.push({
+                    id: `q_${Date.now()}_2`,
+                    type: 'blocker',
+                    text: `מה חוסם את ${process.item.project || process.item.task}?`,
+                    context: process
+                });
+            }
+        });
+        
+        // Questions based on patterns
+        if (patterns.mostActiveHour) {
+            questions.push({
+                id: `q_${Date.now()}_3`,
+                type: 'pattern',
+                text: `שמתי לב שאת הכי פעילה בשעה ${patterns.mostActiveHour}:00. האם להתמקד אז במשימות החשובות?`,
+                context: patterns
+            });
+        }
+        
+        // Strategic questions
+        const criticalItems = this.calculatePriorities(appData).filter(p => p.priorityScore > 80);
+        if (criticalItems.length > 3) {
+            questions.push({
+                id: `q_${Date.now()}_4`,
+                type: 'strategy',
+                text: 'יש לך ${criticalItems.length} משימות קריטיות. איזו הכי חשובה לך כרגע?',
+                options: criticalItems.map(item => item.project || item.task || item.creditor)
+            });
+        }
+        
+        return questions;
+    }
+
+    static runSyncSimulation(sources = ['emails', 'calendar', 'documents']) {
+        const instance = AgentCore.getInstance();
+        return instance.simulateSync(sources);
+    }
+
+    simulateSync(sources) {
+        const results = [];
+        
+        sources.forEach(source => {
+            const items = Math.floor(Math.random() * 5) + 1;
+            const duration = 300 + Math.floor(Math.random() * 700);
+            
+            results.push({
+                source,
+                items,
+                duration,
+                status: 'success',
+                newData: this.generateMockSyncData(source, items)
+            });
+            
+            // Simulate ingesting new data
+            if (source === 'emails') {
+                for (let i = 0; i < items; i++) {
+                    this.graph.addNode('email', {
+                        id: `email_${Date.now()}_${i}`,
+                        subject: `New email ${i}`,
+                        from: 'system@example.com',
+                        importance: Math.random() > 0.5 ? 'high' : 'normal'
+                    });
+                }
+            }
+        });
+        
+        this.memory.remember('last_sync', {
+            timestamp: new Date(),
+            results
+        });
+        
+        return { results, summary: `Synced ${results.reduce((a, r) => a + r.items, 0)} items` };
+    }
+
+    generateMockSyncData(source, count) {
+        const data = [];
+        for (let i = 0; i < count; i++) {
+            switch(source) {
+                case 'emails':
+                    data.push({
+                        subject: `Email ${i}`,
+                        from: `sender${i}@example.com`,
+                        date: new Date()
+                    });
+                    break;
+                case 'calendar':
+                    data.push({
+                        title: `Event ${i}`,
+                        date: new Date(Date.now() + i * 86400000)
+                    });
+                    break;
+                default:
+                    data.push({ type: source, index: i });
+            }
+        }
+        return data;
+    }
+
+    static stateSnapshot(appData) {
+        const instance = AgentCore.getInstance();
+        return instance.getSnapshot(appData);
+    }
+
+    getSnapshot(appData) {
+        return {
+            memory: {
+                shortTerm: Array.from(this.memory.shortTerm.entries()).slice(-10),
+                patterns: this.memory.findPattern(this.state.activeProcesses),
+                stats: {
+                    shortTermSize: this.memory.shortTerm.size,
+                    longTermSize: this.memory.longTerm.size,
+                    episodicCount: this.memory.episodic.length
+                }
+            },
+            knowledgeGraph: {
+                nodes: this.graph.nodes.size,
+                edges: this.graph.edges.length,
+                nodeTypes: Array.from(this.graph.index.keys())
+            },
+            state: this.state,
+            priorities: this.calculatePriorities(appData).slice(0, 5)
+        };
+    }
+
+    static metrics(appData) {
+        const instance = AgentCore.getInstance();
+        return {
+            timestamp: new Date().toISOString(),
+            memory: {
+                shortTerm: instance.memory.shortTerm.size,
+                longTerm: instance.memory.longTerm.size
+            },
+            graph: {
+                nodes: instance.graph.nodes.size,
+                edges: instance.graph.edges.length
+            },
+            activeProcesses: instance.state.activeProcesses.length,
+            pendingDecisions: instance.state.pendingDecisions.length
+        };
+    }
+
+    static generateAutoActions(appData) {
+        const instance = AgentCore.getInstance();
+        return instance.suggestActions(appData);
+    }
+
+    suggestActions(appData) {
         const actions = [];
-        (appData.emails||[]).forEach(em => {
-            if (!em.tags) return;
-            if (em.tags.includes('debt') && em.tags.includes('urgent')) {
-                actions.push({ type:'debt_followup', emailId: em.id, label:'בדיקת חוב דחופה', reason:'מייל עם תיוג debt+urgent', priority: 'high' });
+        const priorities = this.calculatePriorities(appData);
+        
+        priorities.slice(0, 5).forEach(item => {
+            if (item.factors.includes('overdue')) {
+                actions.push({
+                    type: 'urgent',
+                    action: 'send_reminder',
+                    target: item,
+                    message: `⚠️ ${item.project || item.task} באיחור! צריך לטפל דחוף`
+                });
             }
-            if (em.tags.includes('payment')) {
-                actions.push({ type:'payment_plan', emailId: em.id, label:'יצירת תוכנית תשלום', reason:'זוהו מילות מפתח של תשלום', priority: 'medium' });
+            
+            if (item.category === 'debt' && item.factors.includes('due_soon')) {
+                actions.push({
+                    type: 'preparation',
+                    action: 'prepare_objection',
+                    target: item,
+                    message: `להכין התנגדות ל-${item.creditor}`
+                });
             }
-            if (em.tags.includes('document')) {
-                actions.push({ type:'collect_documents', emailId: em.id, label:'איסוף מסמכים חסרים', reason:'בקשה/אזכור למסמכים', priority: 'medium' });
-            }
-            if (em.tags.includes('academic')) {
-                actions.push({ type:'academic_progress', emailId: em.id, label:'בדיקת התקדמות סמינר', reason:'נושא קשור לסמינר/מאמר', priority: 'low' });
+            
+            if (item.status === 'blocked') {
+                actions.push({
+                    type: 'unblock',
+                    action: 'investigate_blocker',
+                    target: item,
+                    message: `לבדוק מה חוסם את ${item.project || item.task}`
+                });
             }
         });
-        return actions.slice(0, 30);
+        
+        return actions;
+    }
+
+    static updateFinancialBalance(balance) {
+        const instance = AgentCore.getInstance();
+        instance.memory.remember('financial_balance', {
+            amount: balance,
+            updated: new Date()
+        }, 'long');
+        instance.state.userProfile.currentBalance = balance;
+        return { success: true, stored: balance };
     }
 }
 
-module.exports = new AgentCore();
+// Memory persistence methods
+MemorySystem.prototype.persist = function() {
+    try {
+        const dataDir = path.join(__dirname, 'data');
+        if (!fs.existsSync(dataDir)) {
+            fs.mkdirSync(dataDir, { recursive: true });
+        }
+        
+        const memoryData = {
+            shortTerm: Array.from(this.shortTerm.entries()),
+            longTerm: Array.from(this.longTerm.entries()),
+            episodic: this.episodic,
+            patterns: Array.from(this.patterns.entries())
+        };
+        
+        fs.writeFileSync(
+            path.join(dataDir, 'memory.json'),
+            JSON.stringify(memoryData, null, 2)
+        );
+        
+        return true;
+    } catch (error) {
+        console.error('Failed to persist memory:', error);
+        return false;
+    }
+};
+
+// Load persisted memory on init
+MemorySystem.prototype.load = function() {
+    try {
+        const memoryFile = path.join(__dirname, 'data', 'memory.json');
+        if (fs.existsSync(memoryFile)) {
+            const data = JSON.parse(fs.readFileSync(memoryFile, 'utf8'));
+            
+            if (data.shortTerm) {
+                this.shortTerm = new Map(data.shortTerm);
+            }
+            if (data.longTerm) {
+                this.longTerm = new Map(data.longTerm);
+            }
+            if (data.episodic) {
+                this.episodic = data.episodic;
+            }
+            if (data.patterns) {
+                this.patterns = new Map(data.patterns);
+            }
+            
+            console.log('✅ Loaded persisted memory');
+            return true;
+        }
+    } catch (error) {
+        console.error('Failed to load memory:', error);
+    }
+    return false;
+};
+
+module.exports = AgentCore;

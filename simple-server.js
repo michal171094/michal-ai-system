@@ -675,6 +675,81 @@ app.post('/api/chat', (req, res) => {
     });
 });
 
+// Document upload endpoint
+app.post('/api/drive/bulk-upload', async (req, res) => {
+    try {
+        console.log('📄 Document upload request received');
+        
+        // For now, return a mock response since we don't have actual OCR
+        const mockResult = {
+            success: true,
+            results: [
+                {
+                    filename: 'document.pdf',
+                    summary: 'מסמך זוהה כחוזה או מסמך רשמי',
+                    tasks: [
+                        {
+                            type: 'review',
+                            title: 'בדיקת מסמך',
+                            priority: 'medium',
+                            description: 'נדרש לבדוק את המסמך שהועלה'
+                        }
+                    ]
+                }
+            ],
+            message: 'מסמכים הועלו בהצלחה (מצב סימולציה)'
+        };
+        
+        res.json(mockResult);
+    } catch (error) {
+        console.error('Document upload error:', error);
+        res.status(500).json({
+            success: false,
+            error: 'שגיאה בהעלאת מסמכים',
+            message: error.message
+        });
+    }
+});
+
+// Gmail OAuth endpoints
+app.get('/api/gmail/auth-url', (req, res) => {
+    try {
+        // Mock Gmail auth URL
+        const authUrl = 'https://accounts.google.com/oauth/authorize?client_id=mock&redirect_uri=http://localhost:3000/auth/google/callback&scope=gmail.readonly';
+        res.json({ authUrl });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to get auth URL' });
+    }
+});
+
+app.get('/api/gmail/accounts', (req, res) => {
+    try {
+        // Mock Gmail accounts
+        res.json({
+            accounts: [
+                { email: 'michal@example.com', active: true, status: 'connected' }
+            ],
+            configured: true
+        });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to get accounts' });
+    }
+});
+
+app.post('/api/gmail/sync', (req, res) => {
+    try {
+        // Mock Gmail sync
+        res.json({
+            success: true,
+            message: 'Gmail sync completed (simulation mode)',
+            emailsProcessed: 5,
+            tasksCreated: 2
+        });
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to sync Gmail' });
+    }
+});
+
 // Serve main page
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
